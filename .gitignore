@@ -1,6 +1,6 @@
 # Build directories
 build/
-__pycache__/
+pycache/
 
 # Data files
 data/
@@ -9,3 +9,10 @@ logs/
 
 # Documents
 documents/
+
+# TopoHexMeshLib exclusions
+TopoHexMeshLib_sheet_singularity/*
+!TopoHexMeshLib_sheet_singularity/HMeshLib/
+!TopoHexMeshLib_sheet_singularity/TopoHexMeshLib_viewer/
+!TopoHexMeshLib_sheet_singularity/src/
+!TopoHexMeshLib_sheet_singularity/packages/
