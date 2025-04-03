@@ -15,4 +15,7 @@ TopoHexMeshLib_sheet_singularity/*
 !TopoHexMeshLib_sheet_singularity/HMeshLib/
 !TopoHexMeshLib_sheet_singularity/TopoHexMeshLib_viewer/
 !TopoHexMeshLib_sheet_singularity/src/
-!TopoHexMeshLib_sheet_singularity/packages/
+
+# python_modules exclusions
+python_modules/pycache/
+python_modules/models/
