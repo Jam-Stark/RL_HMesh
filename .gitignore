@@ -1,0 +1,11 @@
+# Build directories
+build/
+__pycache__/
+
+# Data files
+data/
+visualize_modules/
+logs/
+
+# Documents
+documents/
