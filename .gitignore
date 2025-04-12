@@ -1,0 +1,15 @@
+# Build directories
+build/
+pycache/
+
+# Data files
+data/
+visualize_modules/
+logs/
+
+# Documents
+documents/
+
+# python_modules exclusions
+python_modules/pycache/
+python_modules/models/
