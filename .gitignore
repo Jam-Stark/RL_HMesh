@@ -1,6 +1,6 @@
 # Build directories
 build/
-pycache/
+__pycache__
 
 # Data files
 data/
@@ -11,5 +11,5 @@ logs/
 documents/
 
 # python_modules exclusions
-python_modules/pycache/
+python_modules/__pycache__/
 python_modules/models/
