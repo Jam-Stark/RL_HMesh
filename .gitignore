@@ -1,6 +1,6 @@
 # Build directories
 build/
-__pycache__
+__pycache__/
 
 # Data files
 data/
@@ -13,3 +13,8 @@ documents/
 # python_modules exclusions
 python_modules/__pycache__/
 python_modules/models/
+
+# VS文件夹
+TopoHexMeshLib_sheet_singularity/.vs/
+TopoHexMeshLib_sheet_singularity/_vs/
+TopoHexMeshLib_sheet_singularity/packages/
