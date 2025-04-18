@@ -288,84 +288,194 @@ namespace HMeshLib
 	template<typename M>
 	void sheet_operation<M>::mark_elements_attribute_collapse(std::vector<F*> fs)
 	{
+		log("Starting to mark element attributes, processing faces count: " + std::to_string(fs.size()));
+		
+		// 检查输入参数
+		if (fs.empty()) {
+			log("Warning: Input face list is empty");
+			return;
+		}
+		
+		// 第一次遍历：标记边界并修正法线
 		for (int fIndex = 0; fIndex < fs.size(); fIndex++)
 		{
 			F* f = fs[fIndex];
+			
+			// 检查面是否有效
+			if (f == nullptr) {
+				log("Error: Detected null face pointer, index: " + std::to_string(fIndex));
+				continue;
+			}
+			
+			log("Processing face ID: " + std::to_string(f->id()));
+			
+			// 检查邻接六面体列表是否有效
+			if (f->neighbor_hs.empty()) {
+				log("Warning: Face " + std::to_string(f->id()) + " has no adjacent hexahedra");
+			}
+			
 			//mark boundary
 			if (f->neighbor_hs.size() == 1)
 			{
 				f->boundary() = true;
+				log("Face " + std::to_string(f->id()) + " marked as boundary face");
 			}
 			else
 			{
 				f->boundary() = false;
 			}
 
+			// 修正六面体面法线
 			for (int fhIndex = 0; fhIndex < f->neighbor_hs.size(); fhIndex++)
 			{
+				// 检查六面体ID是否有效
+				if (f->neighbor_hs[fhIndex] < 0 || f->neighbor_hs[fhIndex] >= mesh->maxHid()) {
+					log("Error: Face " + std::to_string(f->id()) + " has invalid adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]));
+					continue;
+				}
+				
 				H* h = mesh->idHexs(f->neighbor_hs[fhIndex]);
-				mesh->revise_hex_face_normal(h);
+				
+				// 检查六面体是否存在
+				if (h == nullptr) {
+					log("Error: Unable to get adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]) + " for face " + std::to_string(f->id()));
+					continue;
+				}
+				
+				try {
+					mesh->revise_hex_face_normal(h);
+				}
+				catch (const std::exception& e) {
+					log("Error while correcting hexahedron face normal, hex ID: " + std::to_string(h->id()) + ", exception: " + std::string(e.what()));
+				}
 			}
-			//compute the normal
-
 		}
 
+		log("First traversal completed, now marking vertices and edges");
+		
+		// 第二次遍历：标记顶点和边
 		for (int fIndex = 0; fIndex < fs.size(); fIndex++)
 		{
 			F* f = fs[fIndex];
-			//mark face vertex
+			
+			// 检查面是否有效
+			if (f == nullptr) continue;
+			
+			// 标记面顶点
+			log("Marking " + std::to_string(f->vs.size()) + " vertices for face " + std::to_string(f->id()));
 			for (int fvIndex = 0; fvIndex < f->vs.size(); fvIndex++)
 			{
+				// 检查顶点ID是否有效
+				if (f->vs[fvIndex] < 0 || f->vs[fvIndex] >= mesh->maxVid()) {
+					log("Error: Face " + std::to_string(f->id()) + " has invalid vertex ID: " + std::to_string(f->vs[fvIndex]));
+					continue;
+				}
+				
 				V* fv = mesh->idVertices(f->vs[fvIndex]);
+				
+				// 检查顶点是否存在
+				if (fv == nullptr) {
+					log("Error: Unable to get vertex ID: " + std::to_string(f->vs[fvIndex]) + " for face " + std::to_string(f->id()));
+					continue;
+				}
+				
 				if (f->boundary())
 				{
 					fv->boundary() = true;
+					log("Vertex " + std::to_string(fv->id()) + " marked as boundary vertex");
 				}
 				else
 				{
+					// 检查顶点的所有相邻面是否有边界面
 					bool is_boundary = false;
 					for (int vfIndex = 0; vfIndex < fv->neighbor_fs.size(); vfIndex++)
 					{
+						// 检查面ID是否有效
+						if (fv->neighbor_fs[vfIndex] < 0 || fv->neighbor_fs[vfIndex] >= mesh->maxFid()) {
+							log("Warning: Vertex " + std::to_string(fv->id()) + " has invalid adjacent face ID: " + std::to_string(fv->neighbor_fs[vfIndex]));
+							continue;
+						}
+						
 						F* fvf = mesh->idFaces(fv->neighbor_fs[vfIndex]);
+						
+						// 检查面是否存在
+						if (fvf == nullptr) {
+							log("Warning: Unable to get adjacent face ID: " + std::to_string(fv->neighbor_fs[vfIndex]) + " for vertex " + std::to_string(fv->id()));
+							continue;
+						}
+						
 						if (fvf->boundary())
 						{
 							is_boundary = true;
+							log("Vertex " + std::to_string(fv->id()) + " marked as boundary vertex (via adjacent face)");
 							break;
 						}
 					}
 					fv->boundary() = is_boundary;
 				}
 			}
-
-			//mark face edge 
+			
+			// 标记面边
+			log("Marking " + std::to_string(f->es.size()) + " edges for face " + std::to_string(f->id()));
 			for (int feIndex = 0; feIndex < f->es.size(); feIndex++)
 			{
+				// 检查边ID是否有效
+				if (f->es[feIndex] < 0 || f->es[feIndex] >= mesh->maxEid()) {
+					log("Error: Face " + std::to_string(f->id()) + " has invalid edge ID: " + std::to_string(f->es[feIndex]));
+					continue;
+				}
+				
 				E* fe = mesh->idEdges(f->es[feIndex]);
+				
+				// 检查边是否存在
+				if (fe == nullptr) {
+					log("Error: Unable to get edge ID: " + std::to_string(f->es[feIndex]) + " for face " + std::to_string(f->id()));
+					continue;
+				}
+				
+				// 边界标记
 				if (f->boundary())
 				{
 					fe->boundary() = true;
+					log("Edge " + std::to_string(fe->id()) + " marked as boundary edge");
 				}
 				else
 				{
+					// 检查是否有任何相邻面是边界
 					bool is_boundary = false;
 					for (int efIndex = 0; efIndex < fe->neighbor_fs.size(); efIndex++)
 					{
+						// 检查面ID是否有效
+						if (fe->neighbor_fs[efIndex] < 0 || fe->neighbor_fs[efIndex] >= mesh->maxFid()) {
+							log("Warning: Edge " + std::to_string(fe->id()) + " has invalid adjacent face ID: " + std::to_string(fe->neighbor_fs[efIndex]));
+							continue;
+						}
+						
 						F* fef = mesh->idFaces(fe->neighbor_fs[efIndex]);
+						
+						// 检查面是否存在
+						if (fef == nullptr) {
+							log("Warning: Unable to get adjacent face ID: " + std::to_string(fe->neighbor_fs[efIndex]) + " for edge " + std::to_string(fe->id()));
+							continue;
+						}
+						
 						if (fef->boundary())
 						{
 							is_boundary = true;
+							log("Edge " + std::to_string(fe->id()) + " marked as boundary edge (via adjacent face)");
 							break;
 						}
 					}
 					fe->boundary() = is_boundary;
 				}
 
-				//mark singularity
+				// 奇异性标记
 				if (fe->boundary())
 				{
 					if (fe->neighbor_hs.size() != 2)
 					{
 						fe->singularity() = true;
+						log("Boundary edge " + std::to_string(fe->id()) + " marked as singular edge, adjacent hexahedra count: " + std::to_string(fe->neighbor_hs.size()));
 					}
 					else
 					{
@@ -377,33 +487,52 @@ namespace HMeshLib
 					if (fe->neighbor_hs.size() != 4)
 					{
 						fe->singularity() = true;
+						log("Non-boundary edge " + std::to_string(fe->id()) + " marked as singular edge, adjacent hexahedra count: " + std::to_string(fe->neighbor_hs.size()));
 					}
 					else
 					{
 						fe->singularity() = false;
 					}
 				}
-				//compute simplification energy
+				
+				// 简化能量计算
 				if (fe->boundary())
 				{
 					if (fe->sharp())
 					{
-						int ideal_degree = round(fe->total_angle() / 90.0);
-						ideal_degree = ideal_degree == 0 ? 1 : ideal_degree;
-						fe->ideal_degree() = ideal_degree;
+						// 检查总角度是否合理
+						if (fe->total_angle() < 0 || fe->total_angle() > 360) {
+							log("Warning: Edge " + std::to_string(fe->id()) + " has abnormal total angle value: " + std::to_string(fe->total_angle()));
+							// 使用默认值避免计算错误
+							fe->ideal_degree() = 2;
+						}
+						else {
+							int ideal_degree = round(fe->total_angle() / 90.0);
+							ideal_degree = ideal_degree == 0 ? 1 : ideal_degree;
+							fe->ideal_degree() = ideal_degree;
+							log("Sharp boundary edge " + std::to_string(fe->id()) + " ideal degree set to: " + std::to_string(ideal_degree) + " (total angle: " + std::to_string(fe->total_angle()) + ")");
+						}
 					}
 					else
 					{
 						fe->ideal_degree() = 2;
+						log("Regular boundary edge " + std::to_string(fe->id()) + " ideal degree set to: 2");
 					}
 				}
 				else
 				{
 					fe->ideal_degree() = 4;
+					log("Non-boundary edge " + std::to_string(fe->id()) + " ideal degree set to: 4");
 				}
+				
+				// 计算简化能量
 				fe->sim_energy() = (int)fe->ideal_degree() - (int)fe->neighbor_hs.size();
+				log("Edge " + std::to_string(fe->id()) + " simplification energy: " + std::to_string(fe->sim_energy()) + 
+					" (ideal degree: " + std::to_string(fe->ideal_degree()) + ", actual adjacent hexahedra: " + std::to_string(fe->neighbor_hs.size()) + ")");
 			}
 		}
+		
+		log("Element attribute marking completed");
 	}
 
 	template<typename M>
