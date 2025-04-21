@@ -250,7 +250,7 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
         
         // 如果找不到具有这个sheet ID的边，跳过
         if (edge_with_id == nullptr){
-            std::cout << "can't find edge with sheet_id: " << sheet_id << std::endl;
+            //std::cout << "can't find edge with sheet_id: " << sheet_id << std::endl;
             continue;
         }
             

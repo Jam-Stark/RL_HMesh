@@ -83,7 +83,8 @@
         "xtree": "cpp",
         "xutility": "cpp",
         "queue": "cpp",
-        "random": "cpp"
+        "random": "cpp",
+        "future": "cpp"
     },
     "cmake.sourceDirectory": "F:/RL_HMesh",
     "cmake.generator": "Visual Studio 17 2022",

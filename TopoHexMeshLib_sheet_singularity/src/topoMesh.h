@@ -5,8 +5,41 @@
 #include<core/Topology/TopoOperation.h>
 #include<unordered_set>
 #include <core/Parser/parser.h>
+#include <fstream>
+#include <cstdlib>
+#include <chrono>
+#include <ctime>
+#include <sstream>
+#include <iomanip>
+
 namespace HMeshLib
 {
+    // 新增日志捕捉代码，自动写入 F:/RL_HMesh/logs/<build_mode>/<session_id>/topoMesh.log
+    inline std::ofstream& getTopoMeshLog() {
+        static std::ofstream ofs;
+        if (!ofs.is_open()) {
+            const char* session_env = std::getenv("RL_HMESH_SESSION_ID");
+            const char* build_mode_env = std::getenv("RL_HMESH_BUILD_MODE");
+            
+            std::string session = session_env ? session_env : "default";
+            std::string build_mode = build_mode_env ? build_mode_env : "Release";
+            
+            std::string logPath = "F:/RL_HMesh/logs/" + build_mode + "/" + session + "/topoMesh.log";
+            ofs.open(logPath, std::ios::app);
+        }
+        return ofs;
+    }
+
+    inline void topoMeshLog(const std::string &msg) {
+        std::ofstream &ofs = getTopoMeshLog();
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+        std::tm* tm_ptr = std::localtime(&now_time);
+        char buffer[10];
+        std::strftime(buffer, sizeof(buffer), "[%H:%M:%S]", tm_ptr);
+        ofs << buffer << " " << msg << std::endl;
+    }
+
 	class TV;
 	class TE;
 	class TF;
@@ -49,6 +82,15 @@ namespace HMeshLib
 			m_corner = false;
 			m_feature_curve = 0;
 			m_boundary_id = 0;
+
+			m_feature_vertex = 0;  // 添加对m_feature_vertex的初始化
+			//m_is_delete = false;   // 同时初始化其他未初始化的成员
+			//m_sheet_inflate = false;
+			//m_newv = 0;
+			//m_sheet = 0;
+			//m_degree = 0;
+			m_mark = false;
+			//m_not_output = false;
 		};
 		~TV() {};
 

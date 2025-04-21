@@ -43,44 +43,44 @@ namespace HMeshLib
 
 		/*funcation*/
 		V* idVertices(int vid) { 
-			return m_map_vertices[vid];
-			/*std::map<int, V*>::iterator  iter = m_map_vertices.find(vid);
+			//return m_map_vertices[vid];
+			typename std::unordered_map<int, V*>::iterator iter = m_map_vertices.find(vid);
 			if (iter!= m_map_vertices.end())
 			{
 				return iter->second;
 			}
 			else 
-				return NULL;*/
+				return NULL;
 		};
 		E* idEdges(int eid) { 
-			return m_map_edges[eid];
-			/*std::map<int, V*>::iterator  iter = m_map_edges.find(vid);
+			//return m_map_edges[eid];
+			typename std::unordered_map<int, E*>::iterator iter = m_map_edges.find(eid);
 			if (iter != m_map_edges.end())
 			{
 				return iter->second;
 			}
 			else
-				return NULL;*/
+				return NULL;
 		};
 		F* idFaces(int fid) { 
-			return m_map_faces[fid];
-			/*std::map<int, V*>::iterator  iter = m_map_faces.find(vid);
+			//return m_map_faces[fid];
+			typename std::unordered_map<int, F*>::iterator iter = m_map_faces.find(fid);
 			if (iter != m_map_faces.end())
 			{
 				return iter->second;
 			}
 			else
-				return NULL;*/
+				return NULL;
 		};
 		H* idHexs(int hid) { 
-			return m_map_hexs[hid];
-			/*std::map<int, V*>::iterator  iter = m_map_hexs.find(vid);
+			//return m_map_hexs[hid];
+			typename std::unordered_map<int, H*>::iterator iter = m_map_hexs.find(hid);
 			if (iter != m_map_hexs.end())
 			{
 				return iter->second;
 			}
 			else
-				return NULL; */
+				return NULL; 
 		};
 		E* VerticesEdge(V* v1, V* v2);
 		F* VerticesFace(std::vector<int> vid);
@@ -148,6 +148,19 @@ namespace HMeshLib
 
 		/*clear*/
 		void _clear();
+
+		// æ‰“å°mapä¿¡æ¯çš„è¾…åŠ©å‡½æ•°
+		void print_vertices_map();
+		void print_edges_map();
+		void print_faces_map();
+		void print_hexs_map();
+
+		// æ‰“å°ç‰¹å®šIDçš„é¡¶ç‚¹ã€è¾¹ã€é¢ã€å…­é¢ä½“ä¿¡æ¯
+		void print_vertex(int id);
+		void print_edge(int id);
+		void print_face(int id);
+		void print_hex(int id);
+
 
 	protected:
 		/*! number of vertices */
@@ -678,7 +691,7 @@ namespace HMeshLib
 				fv[j] = v[order[i][j]];
 			}
 			
-			//???
+			//ï¿½?ï¿½ï¿½?ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			V* facev = idVertices(fv[0]);
 			
 			bool construct_new_face = true;
@@ -690,14 +703,14 @@ namespace HMeshLib
 				{				
 					construct_new_face = false;
 					h->fs.push_back(adjF->id());
-					hexFs[i] = adjF;//??facefs
+					hexFs[i] = adjF;//ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½faceï¿½ï¿½ï¿½ï¿½fsï¿½ï¿½
 					adjF->neighbor_hs.push_back(h->id());
 					
-					//?????hexEs
+					//ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½?ï¿½ï¿½ï¿½hexEsï¿½ï¿½
 					if (i<4)
 					{
 						int edgeOrder[3][2] = { {0,1},{3,0},{1,2} };
-						//??hexEs
+						//ï¿½ï¿½ï¿½??hexEsï¿½ï¿½
 						for (int feIndex = 0; feIndex < 3; feIndex++)
 						{
 							V* ev1 = idVertices(fv[edgeOrder[feIndex][0]]);
@@ -719,22 +732,22 @@ namespace HMeshLib
 				newf->id() = m_maxFaceId;
 				fs.push_back(newf);
 				m_map_faces.insert(std::pair<int, F*>(newf->id(), newf));
-				//??;
+				//ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?;
 				for (int fvIndex = 0; fvIndex < 4; fvIndex++)
 				{
 					newf->vs.push_back(fv[fvIndex]);
 					V* pV = this->idVertices(fv[fvIndex]);
 					pV->neighbor_fs.push_back(newf->id());
 				}
-				//???
+				//ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½?
 				newf->neighbor_hs.push_back(h->id());
 				hexFs[i] = newf;
 				h->fs.push_back(newf->id());
 							
-				if (i<4)//???ÿ?	
+				if (i<4)//?ï¿½?ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½	
 				{
-					//
-					//??				
+					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+					//ï¿½?ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½				
 					int edgeOrder[3][2] = { {0,1},{3,0},{1,2} };
 					for (int eIndex = 0; eIndex < 3; eIndex++)
 					{
@@ -776,7 +789,7 @@ namespace HMeshLib
 								newE->vs.push_back(ev[0]);
 							}
 													
-							//????
+							//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½???ï¿½ï¿½?
 							for (int vIndex = 0; vIndex < 2; vIndex++)
 							{
 								V* Edgev = this->idVertices(ev[vIndex]);
@@ -792,12 +805,12 @@ namespace HMeshLib
 		}
 		
 
-		//????		
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½??ï¿½?		
 		int feOrder[6][4] = { {0,2,3,1},{3, 5 ,6 ,4},{6,8,9,7},{9,11,0,10}, {2,11,8,5},{1,4,7,10} };
 		for (int hexFIndex = 0; hexFIndex < 6; hexFIndex++)
 		{		
 			F* hexf = hexFs[hexFIndex];	
-			if (hexf->es.size()==4)//?½
+			if (hexf->es.size()==4)//?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			{
 				continue;
 			}				
@@ -809,7 +822,7 @@ namespace HMeshLib
 				
 			}
 		}
-		//???
+		//ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½?
 		for (int hexEIndex = 0; hexEIndex < 12; hexEIndex++)
 		{
 			hexEs[hexEIndex]->neighbor_hs.push_back(h->id());
@@ -849,7 +862,7 @@ namespace HMeshLib
 				fv[j] = v[order[i][j]];
 			}
 
-			//???
+			//ï¿½?ï¿½ï¿½?ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			V* facev = idVertices(fv[0]);
 
 			bool construct_new_face = true;
@@ -861,14 +874,14 @@ namespace HMeshLib
 				{
 					construct_new_face = false;
 					h->fs.push_back(adjF->id());
-					hexFs[i] = adjF;//??facefs
+					hexFs[i] = adjF;//ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½faceï¿½ï¿½ï¿½ï¿½fsï¿½ï¿½
 					adjF->neighbor_hs.push_back(h->id());
 
-					//?????hexEs
+					//ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½?ï¿½ï¿½ï¿½hexEsï¿½ï¿½
 					if (i < 4)
 					{
 						int edgeOrder[3][2] = { {0,1},{3,0},{1,2} };
-						//??hexEs	
+						//ï¿½ï¿½ï¿½??hexEsï¿½ï¿½	
 						
 						for (int feIndex = 0; feIndex < 3; feIndex++)
 						{
@@ -882,7 +895,7 @@ namespace HMeshLib
 						//ev[0] = fv[edgeOrder[2][0]];
 						//ev[1] = fv[edgeOrder[2][1]];
 
-						////?????hexEs
+						////ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½???ï¿½ï¿½ï¿½hexEsï¿½ï¿½
 
 						//for (int eIndex = 0; eIndex < 4; eIndex++)
 						//{
@@ -914,22 +927,22 @@ namespace HMeshLib
 				newf->id() = m_maxFaceId;
 				fs.push_back(newf);
 				m_map_faces.insert(std::pair<int, F*>(newf->id(), newf));
-				//??;
+				//ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?;
 				for (int fvIndex = 0; fvIndex < 4; fvIndex++)
 				{
 					newf->vs.push_back(fv[fvIndex]);
 					V* pV = this->idVertices(fv[fvIndex]);
 					pV->neighbor_fs.push_back(newf->id());
 				}
-				//???
+				//ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½?
 				newf->neighbor_hs.push_back(h->id());
 				hexFs[i] = newf;
 				h->fs.push_back(newf->id());
 
-				if (i < 4)//???ÿ?	
+				if (i < 4)//?ï¿½?ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½	
 				{
-					//
-					//??				
+					//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+					//ï¿½?ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½				
 					int edgeOrder[3][2] = { {0,1},{3,0},{1,2} };
 					for (int eIndex = 0; eIndex < 3; eIndex++)
 					{
@@ -971,7 +984,7 @@ namespace HMeshLib
 								newE->vs.push_back(ev[0]);
 							}
 
-							//????
+							//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½???ï¿½ï¿½?
 							for (int vIndex = 0; vIndex < 2; vIndex++)
 							{
 								V* Edgev = this->idVertices(ev[vIndex]);
@@ -985,12 +998,12 @@ namespace HMeshLib
 
 			}
 		}
-		//????		
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½??ï¿½?		
 		int feOrder[6][4] = { {0,2,3,1},{3, 5 ,6 ,4},{6,8,9,7},{9,11,0,10}, {2,11,8,5},{1,4,7,10} };
 		for (int hexFIndex = 0; hexFIndex < 6; hexFIndex++)
 		{
 			F* hexf = hexFs[hexFIndex];
-			if (hexf->es.size() == 4)//?½
+			if (hexf->es.size() == 4)//?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 			{
 				continue;
 			}
@@ -1003,7 +1016,7 @@ namespace HMeshLib
 			}
 		}
 		
-		//???
+		//ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½?ï¿½ï¿½?
 		for (int hexEIndex = 0; hexEIndex < 12; hexEIndex++)
 		{
 			hexEs[hexEIndex]->neighbor_hs.push_back(h->id());
@@ -1278,6 +1291,11 @@ namespace HMeshLib
 		singularities = mark_singularity();
 		/*compute the face normal*/
 		computeNormal();
+
+		print_hexs_map();
+		print_faces_map();
+		print_edges_map();
+		print_vertices_map();
 	}
 
 	template<typename V, typename E, typename F, typename H>
@@ -1346,6 +1364,7 @@ namespace HMeshLib
 		}
 
 		_os.close();
+
 	}
 
 	/*	
@@ -1580,64 +1599,163 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V, E, F, H>::revise_hex_face_normal(H* h)
 	{
-		for (int fIndex = 0; fIndex < h->fs.size(); fIndex++)
-		{
-			F* f = idFaces(h->fs[fIndex]);
-			if (f->neighbor_hs[0] != h->id()) continue;
-			//if (f->neighbor_hs.size()==1)
+		// é¦–å…ˆè·å–æ—¥å¿—å‡½æ•°ï¼Œå¦‚æœåœ¨HMeshLibå‘½åç©ºé—´ä¸­å­˜åœ¨
+		auto logFunc = [](const std::string& msg) {
+			// æ£€æŸ¥æ˜¯å¦å­˜åœ¨topoMeshLogå‡½æ•°
+			if (HMeshLib::getTopoMeshLog()) {
+				HMeshLib::topoMeshLog(msg);
+			}
+			// æ£€æŸ¥æ˜¯å¦å­˜åœ¨sheet_operationæ—¥å¿—å‡½æ•°
+			else if (HMeshLib::getSheetLog()) {
+				HMeshLib::log(msg);
+			}
+		};
+		
+		try {
+			// Inside revise_hex_face_normal(H* h)
+			logFunc("Entering revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
+			
+			for (int fIndex = 0; fIndex < h->fs.size(); fIndex++)
 			{
-				std::vector<V*> orderVs;
-				std::vector<V*> fVs;
-				//revise normal
-				for (int vIndex = 0; vIndex < 4; vIndex++)
-				{
-					orderVs.push_back(idVertices(h->vs[h->draw_order[fIndex][vIndex]]));
-					
-					fVs.push_back(idVertices(f->vs[vIndex]));
+				int fid = h->fs[fIndex];
+				logFunc("  Processing face index " + std::to_string(fIndex) + ", face ID: " + std::to_string(fid));
+				F* f = idFaces(fid);
+				if (f == nullptr) {
+					logFunc("    Error: Face pointer is null!");
+					continue; // or handle error
+				}
+				logFunc("    Face pointer retrieved successfully.");
+				
+				// æ£€æŸ¥é¢çš„é‚»æ¥å…­é¢ä½“
+				if (f->neighbor_hs.empty()) {
+					logFunc("    Warning: Face " + std::to_string(f->id()) + " has no neighbors!");
+					// Potentially skip logic that assumes neighbors exist
+				} else if (f->neighbor_hs[0] != h->id()) {
+					logFunc("    Skipping face " + std::to_string(f->id()) + " as h is not the first neighbor.");
+					continue;
 				}
 				
-				CPoint normal;
-				CPoint fNormal;
-				for (int vIndex = 0; vIndex < 4; vIndex++)
+				//if (f->neighbor_hs[0] != h->id()) continue;
+				//if (f->neighbor_hs.size()==1)
 				{
-					normal+= (orderVs[(vIndex+1)%4]->position() - orderVs[vIndex]->position()) ^ (orderVs[(vIndex + 3) % 4]->position() - orderVs[vIndex]->position());
-					fNormal+= (fVs[(vIndex + 1) % 4]->position() - fVs[vIndex]->position()) ^ (fVs[(vIndex + 3) % 4]->position() - fVs[vIndex]->position());
-				}			
-				normal = normal * 0.25;
-				normal /= normal.norm();			
-				fNormal = fNormal * 0.25;
-				fNormal /= fNormal.norm();
-				f->normal() = normal;
-
-				double theta = normal * fNormal / (normal.norm() * fNormal.norm());
-				theta = theta < -1 ? -1 : theta;
-				theta = theta > 1 ? 1 : theta;
-				double angle = acos(theta)/3.1415926*180;
-
-				if (f->neighbor_hs[0]==h->id())
-				{
-					if (angle > 90)
+					std::vector<V*> orderVs;
+					std::vector<V*> fVs;
+					
+					logFunc("    Processing face vertices...");
+					//revise normal
+					for (int vIndex = 0; vIndex < 4; vIndex++)
 					{
-						int tempId = f->vs[0];
-						f->vs[0] = f->vs[3];
-						f->vs[3] = tempId;
-						tempId = f->vs[1];
-						f->vs[1] = f->vs[2];
-						f->vs[2] = tempId;
+						int orderVid = h->vs[h->draw_order[fIndex][vIndex]];
+						logFunc("      Accessing ordered vertex ID: " + std::to_string(orderVid));
+						V* orderedV = idVertices(orderVid);
+						if (orderedV == nullptr) {
+							logFunc("        Error: Ordered vertex pointer is null!");
+							// handle error
+						} else {
+							logFunc("        Ordered vertex position: (" + std::to_string(orderedV->position()[0]) + ", " + 
+								std::to_string(orderedV->position()[1]) + ", " + 
+								std::to_string(orderedV->position()[2]) + ")");
+							orderVs.push_back(orderedV);
+						}
+						
+						int faceVid = f->vs[vIndex];
+						logFunc("      Accessing face vertex ID: " + std::to_string(faceVid));
+						V* faceV = idVertices(faceVid);
+						if (faceV == nullptr) {
+							logFunc("        Error: Face vertex pointer is null!");
+							// handle error
+						} else {
+							logFunc("        Face vertex position: (" + std::to_string(faceV->position()[0]) + ", " + 
+								std::to_string(faceV->position()[1]) + ", " + 
+								std::to_string(faceV->position()[2]) + ")");
+							fVs.push_back(faceV);
+						}
+					}
+					
+					logFunc("    Computing normals...");
+					CPoint normal;
+					CPoint fNormal;
+					for (int vIndex = 0; vIndex < 4; vIndex++)
+					{
+						logFunc("      Computing cross product for vertex index " + std::to_string(vIndex));
+						try {
+							CPoint v1 = orderVs[(vIndex+1)%4]->position() - orderVs[vIndex]->position();
+							CPoint v2 = orderVs[(vIndex+3)%4]->position() - orderVs[vIndex]->position();
+							CPoint crossProduct = v1 ^ v2;
+							logFunc("        Cross product result: (" + std::to_string(crossProduct[0]) + ", " + 
+								std::to_string(crossProduct[1]) + ", " + 
+								std::to_string(crossProduct[2]) + ")");
+							normal += crossProduct;
+							
+							v1 = fVs[(vIndex+1)%4]->position() - fVs[vIndex]->position();
+							v2 = fVs[(vIndex+3)%4]->position() - fVs[vIndex]->position();
+							crossProduct = v1 ^ v2;
+							fNormal += crossProduct;
+						} catch (const std::exception& e) {
+							logFunc("        Exception during cross product calculation: " + std::string(e.what()));
+						} catch (...) {
+							logFunc("        Unknown exception during cross product calculation");
+						}
+					}
+					
+					logFunc("    Normalizing normals...");
+					normal = normal * 0.25;
+					double normalNorm = normal.norm();
+					if (normalNorm < 1e-10) {
+						logFunc("      Warning: Very small normal norm: " + std::to_string(normalNorm));
+					}
+					normal /= normalNorm;
+					logFunc("      Normalized normal: (" + std::to_string(normal[0]) + ", " + 
+						std::to_string(normal[1]) + ", " + std::to_string(normal[2]) + ")");
+							
+					fNormal = fNormal * 0.25;
+					double fNormalNorm = fNormal.norm();
+					if (fNormalNorm < 1e-10) {
+						logFunc("      Warning: Very small face normal norm: " + std::to_string(fNormalNorm));
+					}
+					fNormal /= fNormalNorm;
+					logFunc("      Normalized face normal: (" + std::to_string(fNormal[0]) + ", " + 
+						std::to_string(fNormal[1]) + ", " + std::to_string(fNormal[2]) + ")");
+					
+					f->normal() = normal;
 
-						int tempEId = f->es[0];
-						f->es[0] = f->es[3];
-						f->es[3] = tempEId;
-						tempEId = f->es[1];
-						f->es[1] = f->es[2];
-						f->es[2] = tempEId;
+					double theta = normal * fNormal / (normalNorm * fNormalNorm);
+					theta = theta < -1 ? -1 : theta;
+					theta = theta > 1 ? 1 : theta;
+					double angle = acos(theta)/3.1415926*180;
+					logFunc("      Angle between normals: " + std::to_string(angle) + " degrees");
 
-						//f->normal() = normal;
+					if (f->neighbor_hs[0] == h->id())
+					{
+						if (angle > 90)
+						{
+							logFunc("      Flipping face " + std::to_string(f->id()) + " normals (angle = " + std::to_string(angle) + ")");
+							int tempId = f->vs[0];
+							f->vs[0] = f->vs[3];
+							f->vs[3] = tempId;
+							tempId = f->vs[1];
+							f->vs[1] = f->vs[2];
+							f->vs[2] = tempId;
+
+							int tempEId = f->es[0];
+							f->es[0] = f->es[3];
+							f->es[3] = tempEId;
+							tempEId = f->es[1];
+							f->es[1] = f->es[2];
+							f->es[2] = tempEId;
+							logFunc("      Face vertices and edges reordered successfully");
+						}
 					}
 				}
-				
-				
 			}
+			
+			logFunc("Exiting revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
+		}
+		catch (const std::exception& e) {
+			logFunc("åœ¨ä¿®æ­£æ³•çº¿æ—¶å‘ç”Ÿå¼‚å¸¸: " + std::string(e.what()));
+		}
+		catch (...) {
+			logFunc("åœ¨ä¿®æ­£æ³•çº¿æ—¶å‘ç”ŸæœªçŸ¥å¼‚å¸¸");
 		}
 	}
 
@@ -1715,7 +1833,202 @@ namespace HMeshLib
 		m_map_edges.clear();
 		m_map_faces.clear();
 		m_map_hexs.clear();
+	};
+
+	// æ‰“å°mapä¿¡æ¯çš„è¾…åŠ©å‡½æ•°
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_vertices_map() {
+		std::string logMsg = "Vertices Map (size=" + std::to_string(m_map_vertices.size()) + "):";
+		if (HMeshLib::getTopoMeshLog()) {
+			HMeshLib::topoMeshLog(logMsg);
+			
+			int count = 0;
+			for (auto& pair : m_map_vertices) {
+				std::string msg = "  [" + std::to_string(count++) + "] key=" + std::to_string(pair.first) + 
+					", value=" + (pair.second ? "valid ptr" : "NULL");
+				HMeshLib::topoMeshLog(msg);
+				
+				if (count > 500) {
+					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_vertices.size() - 20) + " more items");
+					break;
+				}
+			}
+		}
 	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_edges_map() {
+		std::string logMsg = "Edges Map (size=" + std::to_string(m_map_edges.size()) + "):";
+		if (HMeshLib::getTopoMeshLog()) {
+			HMeshLib::topoMeshLog(logMsg);
+			
+			int count = 0;
+			for (auto& pair : m_map_edges) {
+				std::string msg = "  [" + std::to_string(count++) + "] key=" + std::to_string(pair.first) + 
+					", value=" + (pair.second ? "valid ptr" : "NULL");
+				HMeshLib::topoMeshLog(msg);
+				
+				if (count > 20) {
+					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_edges.size() - 20) + " more items");
+					break;
+				}
+			}
+		}
+	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_faces_map() {
+		std::string logMsg = "Faces Map (size=" + std::to_string(m_map_faces.size()) + "):";
+		if (HMeshLib::getTopoMeshLog()) {
+			HMeshLib::topoMeshLog(logMsg);
+			
+			int count = 0;
+			for (auto& pair : m_map_faces) {
+				std::string msg = "  [" + std::to_string(count++) + "] key=" + std::to_string(pair.first) + 
+					", value=" + (pair.second ? "valid ptr" : "NULL");
+				HMeshLib::topoMeshLog(msg);
+				
+				if (count > 20) {
+					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_faces.size() - 20) + " more items");
+					break;
+				}
+			}
+		}
+	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_hexs_map() {
+		std::string logMsg = "Hexs Map (size=" + std::to_string(m_map_hexs.size()) + "):";
+		if (HMeshLib::getTopoMeshLog()) {
+			HMeshLib::topoMeshLog(logMsg);
+			
+			int count = 0;
+			for (auto& pair : m_map_hexs) {
+				std::string msg = "  [" + std::to_string(count++) + "] key=" + std::to_string(pair.first) + 
+					", value=" + (pair.second ? "valid ptr" : "NULL");
+				HMeshLib::topoMeshLog(msg);
+				
+				if (count > 20) {
+					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_hexs.size() - 20) + " more items");
+					break;
+				}
+			}
+		}
+	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_vertex(int id) {
+		if (HMeshLib::getTopoMeshLog()) {
+			auto it = m_map_vertices.find(id);
+			if (it != m_map_vertices.end()) {
+				V* v = it->second;
+				if (v) {
+					std::stringstream ss;
+					ss << "Vertex " << id << ": ";
+					ss << "pos=(" << v->position()[0] << "," << v->position()[1] << "," << v->position()[2] << ") ";
+					ss << "neighbor_es.size=" << v->neighbor_es.size() << " ";
+					ss << "neighbor_fs.size=" << v->neighbor_fs.size() << " ";
+					ss << "neighbor_hs.size=" << v->neighbor_hs.size();
+					HMeshLib::topoMeshLog(ss.str());
+				} else {
+					HMeshLib::topoMeshLog("Vertex " + std::to_string(id) + ": NULL pointer");
+				}
+			} else {
+				HMeshLib::topoMeshLog("Vertex " + std::to_string(id) + ": Not found in map");
+			}
+		}
+	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_edge(int id) {
+		if (HMeshLib::getTopoMeshLog()) {
+			auto it = m_map_edges.find(id);
+			if (it != m_map_edges.end()) {
+				E* e = it->second;
+				if (e) {
+					std::stringstream ss;
+					ss << "Edge " << id << ": ";
+					ss << "vs=[";
+					for (size_t i = 0; i < e->vs.size(); i++) {
+						if (i > 0) ss << ",";
+						ss << e->vs[i];
+					}
+					ss << "] ";
+					ss << "neighbor_fs.size=" << e->neighbor_fs.size() << " ";
+					ss << "neighbor_hs.size=" << e->neighbor_hs.size();
+					HMeshLib::topoMeshLog(ss.str());
+				} else {
+					HMeshLib::topoMeshLog("Edge " + std::to_string(id) + ": NULL pointer");
+				}
+			} else {
+				HMeshLib::topoMeshLog("Edge " + std::to_string(id) + ": Not found in map");
+			}
+		}
+	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_face(int id) {
+		if (HMeshLib::getTopoMeshLog()) {
+			auto it = m_map_faces.find(id);
+			if (it != m_map_faces.end()) {
+				F* f = it->second;
+				if (f) {
+					std::stringstream ss;
+					ss << "Face " << id << ": ";
+					ss << "vs=[";
+					for (size_t i = 0; i < f->vs.size(); i++) {
+						if (i > 0) ss << ",";
+						ss << f->vs[i];
+					}
+					ss << "] ";
+					ss << "es=[";
+					for (size_t i = 0; i < f->es.size(); i++) {
+						if (i > 0) ss << ",";
+						ss << f->es[i];
+					}
+					ss << "] ";
+					ss << "neighbor_hs.size=" << f->neighbor_hs.size();
+					HMeshLib::topoMeshLog(ss.str());
+				} else {
+					HMeshLib::topoMeshLog("Face " + std::to_string(id) + ": NULL pointer");
+				}
+			} else {
+				HMeshLib::topoMeshLog("Face " + std::to_string(id) + ": Not found in map");
+			}
+		}
+	}
+	template<typename V, typename E, typename F, typename H>
+	void topoM<V,E,F,H>::print_hex(int id) {
+		if (HMeshLib::getTopoMeshLog()) {
+			auto it = m_map_hexs.find(id);
+			if (it != m_map_hexs.end()) {
+				H* h = it->second;
+				if (h) {
+					std::stringstream ss;
+					ss << "Hex " << id << ": ";
+					ss << "vs=[";
+					for (size_t i = 0; i < h->vs.size(); i++) {
+						if (i > 0) ss << ",";
+						ss << h->vs[i];
+					}
+					ss << "] ";
+					ss << "es=[";
+					for (size_t i = 0; i < h->es.size() && i < 10; i++) {
+						if (i > 0) ss << ",";
+						ss << h->es[i];
+					}
+					if (h->es.size() > 10) ss << ",...";
+					ss << "] ";
+					ss << "fs=[";
+					for (size_t i = 0; i < h->fs.size(); i++) {
+						if (i > 0) ss << ",";
+						ss << h->fs[i];
+					}
+					ss << "]";
+					HMeshLib::topoMeshLog(ss.str());
+				} else {
+					HMeshLib::topoMeshLog("Hex " + std::to_string(id) + ": NULL pointer");
+				}
+			} else {
+				HMeshLib::topoMeshLog("Hex " + std::to_string(id) + ": Not found in map");
+			}
+		}
+	};
+
 
 }
 
