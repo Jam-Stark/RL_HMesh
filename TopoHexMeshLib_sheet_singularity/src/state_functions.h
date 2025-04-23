@@ -138,6 +138,13 @@ void log(int episode, const State& state, int action, const State& next_state, f
     std::string log_dir = "f:\\RL_HMesh\\logs\\" + session_id;
     std::string log_filename = log_dir + "\\training.log";
     
+    // 确保目录存在，如果不存在则创建
+    std::string create_logs_dir = "mkdir \"f:\\RL_HMesh\\logs\" 2>nul";
+    system(create_logs_dir.c_str());
+    
+    std::string create_session_dir = "mkdir \"" + log_dir + "\" 2>nul";
+    system(create_session_dir.c_str());
+    
     std::ofstream log_file(log_filename, std::ios::app);
     
     auto now = std::chrono::system_clock::now();

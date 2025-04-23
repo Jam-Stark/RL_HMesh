@@ -170,7 +170,7 @@ int main(int argc, char* argv[])
         path = mesh_name.substr(0, pos+1);
         std::cout << "Mesh file: " << mesh_name << std::endl;
 
-        for(int episode = 0; episode < 50; episode++){
+        for(int episode = 0; episode < 1; episode++){
             TMesh tmesh;
             sheet_operation<TMesh> sheet_op(&tmesh);
             get_singularity_number<TMesh> get_singularity_num_op(&tmesh);

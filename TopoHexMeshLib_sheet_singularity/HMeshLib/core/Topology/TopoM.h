@@ -44,7 +44,7 @@ namespace HMeshLib
 		/*funcation*/
 		V* idVertices(int vid) { 
 			//return m_map_vertices[vid];
-			typename std::unordered_map<int, V*>::iterator iter = m_map_vertices.find(vid);
+			std::unordered_map<int, V*>::iterator iter = m_map_vertices.find(vid);
 			if (iter!= m_map_vertices.end())
 			{
 				return iter->second;
@@ -54,7 +54,7 @@ namespace HMeshLib
 		};
 		E* idEdges(int eid) { 
 			//return m_map_edges[eid];
-			typename std::unordered_map<int, E*>::iterator iter = m_map_edges.find(eid);
+			std::unordered_map<int, E*>::iterator iter = m_map_edges.find(eid);
 			if (iter != m_map_edges.end())
 			{
 				return iter->second;
@@ -64,7 +64,7 @@ namespace HMeshLib
 		};
 		F* idFaces(int fid) { 
 			//return m_map_faces[fid];
-			typename std::unordered_map<int, F*>::iterator iter = m_map_faces.find(fid);
+			std::unordered_map<int, F*>::iterator iter = m_map_faces.find(fid);
 			if (iter != m_map_faces.end())
 			{
 				return iter->second;
@@ -74,7 +74,7 @@ namespace HMeshLib
 		};
 		H* idHexs(int hid) { 
 			//return m_map_hexs[hid];
-			typename std::unordered_map<int, H*>::iterator iter = m_map_hexs.find(hid);
+			std::unordered_map<int, H*>::iterator iter = m_map_hexs.find(hid);
 			if (iter != m_map_hexs.end())
 			{
 				return iter->second;
@@ -389,17 +389,17 @@ namespace HMeshLib
 	}
 
 	template<typename V, typename E, typename F, typename H>
-	std::vector<E*> topoM< V, E, F, H>::f_adj_e_in_hex(H* hex, F* face)
+	std::vector<E*> topoM< V, E, F, H>::f_adj_e_in_hex(H* hex, F* face) //edited
 	{
-		std::vector<F*> results;
+		std::vector<E*> results;
 		int fIndex = hex->faceIndex(face->id());
 		if (fIndex == -1)
 		{
 			return NULL;
 		}
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 4; i++)  // 使用固定值4，因为每个面有4条边
 		{
-			E* resultE = idEdges(hex->fs[hex->fadje[fIndex][i]]);
+			E* resultE = idEdges(hex->es[hex->fadje[fIndex][i]]);
 			results.push_back(resultE);
 		}	
 		return results;
@@ -1591,7 +1591,37 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	bool topoM<V, E, F, H>::change_Edge_V(E* e, V* source, V* target)
 	{
-
+		// 检查source是否是边e的一个端点
+		int vIndex = e->vertexIndex(source->id());
+		if (vIndex == -1)
+		{
+			return false;
+		}
+		
+		// 修改边上的顶点
+		e->vs[vIndex] = target->id();
+		
+		// 更新邻接关系
+		target->push_back_neighbor_e(e->id());
+		source->delete_neighbor_e(e->id());
+		
+		// 更新与这条边相关的面的顶点
+		for (int i = 0; i < e->neighbor_fs.size(); i++)
+		{
+			int fid = e->neighbor_fs[i];
+			F* f = idFaces(fid);
+			if (f == NULL) continue;
+			
+			int fvIndex = f->vertexIndex(source->id());
+			if (fvIndex != -1)
+			{
+				f->vs[fvIndex] = target->id();
+				target->push_back_neighbor_f(fid);
+				source->delete_neighbor_f(fid);
+			}
+		}
+		
+		return true;
 	}
 	
 
@@ -1612,8 +1642,33 @@ namespace HMeshLib
 		};
 		
 		try {
+			//logFunc("In revise_hex_face_normal function.");
+			// print_hexs_map();
+			// print_faces_map();
+			// print_edges_map();
+			// print_vertices_map();
 			// Inside revise_hex_face_normal(H* h)
 			logFunc("Entering revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
+			
+			// 先检查六面体的顶点是否都存在
+			logFunc("Checking hex vertices:");
+			for (int i = 0; i < h->vs.size(); i++) {
+				int vid = h->vs[i];
+				auto iter = m_map_vertices.find(vid);
+				if (iter == m_map_vertices.end()) {
+					logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " does not exist in vertex map!");
+				} else if (iter->second == nullptr) {
+					logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists in map but is nullptr!");
+				} else {
+					logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists and is valid.");
+				}
+			}
+			
+			// 打印与六面体相连的所有面的ID
+			logFunc("Connected faces:");
+			for (int i = 0; i < h->fs.size(); i++) {
+				logFunc("  Face ID: " + std::to_string(h->fs[i]) + " at index " + std::to_string(i));
+			}
 			
 			for (int fIndex = 0; fIndex < h->fs.size(); fIndex++)
 			{
@@ -1622,129 +1677,227 @@ namespace HMeshLib
 				F* f = idFaces(fid);
 				if (f == nullptr) {
 					logFunc("    Error: Face pointer is null!");
-					continue; // or handle error
+					continue; // 跳过这个面
 				}
 				logFunc("    Face pointer retrieved successfully.");
 				
 				// 检查面的邻接六面体
 				if (f->neighbor_hs.empty()) {
 					logFunc("    Warning: Face " + std::to_string(f->id()) + " has no neighbors!");
-					// Potentially skip logic that assumes neighbors exist
+					continue;
 				} else if (f->neighbor_hs[0] != h->id()) {
 					logFunc("    Skipping face " + std::to_string(f->id()) + " as h is not the first neighbor.");
 					continue;
 				}
 				
-				//if (f->neighbor_hs[0] != h->id()) continue;
-				//if (f->neighbor_hs.size()==1)
+				
+
+				// 检查面的顶点
+				logFunc("    Face vertices:");
+				for (int i = 0; i < f->vs.size(); i++) {
+					int vid = f->vs[i];
+					auto iter = m_map_vertices.find(vid);
+					if (iter == m_map_vertices.end()) {
+						logFunc("      Face vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " does not exist in vertex map!");
+					} else if (iter->second == nullptr) {
+						logFunc("      Face vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists in map but is nullptr!");
+					}
+				}
+				
+				// 检查draw_order中的顶点
+				logFunc("    Checking draw_order vertices for face index " + std::to_string(fIndex) + ":");
+				for (int i = 0; i < 6/*draw_order[fIndex].size()*/; i++) {
+					int orderIndex = h->draw_order[fIndex][i];
+					if (orderIndex < 0 || orderIndex >= h->vs.size()) {
+						logFunc("      draw_order[" + std::to_string(fIndex) + "][" + std::to_string(i) + 
+							"] = " + std::to_string(orderIndex) + " is out of bounds for hex vertices array!");
+						continue;
+					}
+					int vid = h->vs[orderIndex];
+					auto iter = m_map_vertices.find(vid);
+					if (iter == m_map_vertices.end()) {
+						logFunc("      draw_order vertex " + std::to_string(vid) + " does not exist in vertex map!");
+					} else if (iter->second == nullptr) {
+						logFunc("      draw_order vertex " + std::to_string(vid) + " exists in map but is nullptr!");
+					}
+				}
+				
+				// 检查所有顶点是否存在
+				bool missingVertex = false;
+				for (int vIndex = 0; vIndex < 4; vIndex++) {
+					if (vIndex >= f->vs.size()) {
+						logFunc("    Error: Face vertex index " + std::to_string(vIndex) + 
+							" is out of bounds (face vs size: " + std::to_string(f->vs.size()) + ")");
+						missingVertex = true;
+						break;
+					}
+					
+					int vID = f->vs[vIndex];
+					if (idVertices(vID) == nullptr) {
+						logFunc("    Error: Face " + std::to_string(f->id()) + " references non-existent vertex " + std::to_string(vID));
+						missingVertex = true;
+						break;
+					}
+				}
+                
+				if (missingVertex) {
+					logFunc("    Skipping face " + std::to_string(f->id()) + " due to missing vertex references");
+					continue;
+				}
+				
+				std::vector<V*> orderVs;
+				std::vector<V*> fVs;
+				
+				logFunc("    Processing face vertices...");
+				// 检查draw_order数组的边界
+				if (fIndex >= 6/*draw_order[fIndex].size()*/) {
+					logFunc("    Error: draw_order index " + std::to_string(fIndex) + 
+						" is out of bounds (size: " + std::to_string(4/*draw_order[fIndex].size()*/) + ")");
+					continue;
+				}
+				
+				//revise normal
+				for (int vIndex = 0; vIndex < 4; vIndex++)
 				{
-					std::vector<V*> orderVs;
-					std::vector<V*> fVs;
+					if (vIndex >= 4/*draw_order[fIndex].size()*/) {
+						logFunc("      Error: draw_order[" + std::to_string(fIndex) + "] index " + 
+							std::to_string(vIndex) + " is out of bounds (size: " + 
+							std::to_string(4/*draw_order[fIndex].size()*/) + ")");
+						missingVertex = true;
+						break;
+					}
 					
-					logFunc("    Processing face vertices...");
-					//revise normal
-					for (int vIndex = 0; vIndex < 4; vIndex++)
-					{
-						int orderVid = h->vs[h->draw_order[fIndex][vIndex]];
-						logFunc("      Accessing ordered vertex ID: " + std::to_string(orderVid));
-						V* orderedV = idVertices(orderVid);
-						if (orderedV == nullptr) {
-							logFunc("        Error: Ordered vertex pointer is null!");
-							// handle error
-						} else {
-							logFunc("        Ordered vertex position: (" + std::to_string(orderedV->position()[0]) + ", " + 
-								std::to_string(orderedV->position()[1]) + ", " + 
-								std::to_string(orderedV->position()[2]) + ")");
-							orderVs.push_back(orderedV);
-						}
+					if (h->draw_order[fIndex][vIndex] >= h->vs.size()) {
+						logFunc("      Error: draw_order value " + std::to_string(h->draw_order[fIndex][vIndex]) + 
+							" is out of bounds for hex vertices (size: " + std::to_string(h->vs.size()) + ")");
+						missingVertex = true;
+						break;
+					}
+					
+					int orderVid = h->vs[h->draw_order[fIndex][vIndex]];
+					logFunc("      Accessing ordered vertex ID: " + std::to_string(orderVid));
+					V* orderedV = idVertices(orderVid);
+					if (orderedV == nullptr) {
+						logFunc("        Error: Ordered vertex pointer is null!");
+						missingVertex = true;
+						break;
+					} else {
+						logFunc("        Ordered vertex position: (" + std::to_string(orderedV->position()[0]) + ", " + 
+							std::to_string(orderedV->position()[1]) + ", " + 
+							std::to_string(orderedV->position()[2]) + ")");
+						orderVs.push_back(orderedV);
+					}
+					
+					if (vIndex >= f->vs.size()) {
+						logFunc("      Error: Face vertex index " + std::to_string(vIndex) + 
+							" is out of bounds (face vs size: " + std::to_string(f->vs.size()) + ")");
+						missingVertex = true;
+						break;
+					}
+					
+					int faceVid = f->vs[vIndex];
+					logFunc("      Accessing face vertex ID: " + std::to_string(faceVid));
+					V* faceV = idVertices(faceVid);
+					if (faceV == nullptr) {
+						logFunc("        Error: Face vertex pointer is null!");
+						missingVertex = true;
+						break;
+					} else {
+						logFunc("        Face vertex position: (" + std::to_string(faceV->position()[0]) + ", " + 
+							std::to_string(faceV->position()[1]) + ", " + 
+							std::to_string(faceV->position()[2]) + ")");
+						fVs.push_back(faceV);
+					}
+				}
+				
+				if (missingVertex) {
+					logFunc("    Skipping face normal calculation due to missing vertices");
+					continue;
+				}
+				
+				logFunc("    Computing normals...");
+				CPoint normal;
+				CPoint fNormal;
+				for (int vIndex = 0; vIndex < 4; vIndex++)
+				{
+					logFunc("      Computing cross product for vertex index " + std::to_string(vIndex));
+					try {
+						CPoint v1 = orderVs[(vIndex+1)%4]->position() - orderVs[vIndex]->position();
+						CPoint v2 = orderVs[(vIndex+3)%4]->position() - orderVs[vIndex]->position();
+						CPoint crossProduct = v1 ^ v2;
+						logFunc("        Cross product result: (" + std::to_string(crossProduct[0]) + ", " + 
+							std::to_string(crossProduct[1]) + ", " + 
+							std::to_string(crossProduct[2]) + ")");
+						normal += crossProduct;
 						
-						int faceVid = f->vs[vIndex];
-						logFunc("      Accessing face vertex ID: " + std::to_string(faceVid));
-						V* faceV = idVertices(faceVid);
-						if (faceV == nullptr) {
-							logFunc("        Error: Face vertex pointer is null!");
-							// handle error
-						} else {
-							logFunc("        Face vertex position: (" + std::to_string(faceV->position()[0]) + ", " + 
-								std::to_string(faceV->position()[1]) + ", " + 
-								std::to_string(faceV->position()[2]) + ")");
-							fVs.push_back(faceV);
-						}
+						v1 = fVs[(vIndex+1)%4]->position() - fVs[vIndex]->position();
+						v2 = fVs[(vIndex+3)%4]->position() - fVs[vIndex]->position();
+						crossProduct = v1 ^ v2;
+						fNormal += crossProduct;
+					} catch (const std::exception& e) {
+						logFunc("        Exception during cross product calculation: " + std::string(e.what()));
+						missingVertex = true;
+						break;
+					} catch (...) {
+						logFunc("        Unknown exception during cross product calculation");
+						missingVertex = true;
+						break;
 					}
-					
-					logFunc("    Computing normals...");
-					CPoint normal;
-					CPoint fNormal;
-					for (int vIndex = 0; vIndex < 4; vIndex++)
-					{
-						logFunc("      Computing cross product for vertex index " + std::to_string(vIndex));
-						try {
-							CPoint v1 = orderVs[(vIndex+1)%4]->position() - orderVs[vIndex]->position();
-							CPoint v2 = orderVs[(vIndex+3)%4]->position() - orderVs[vIndex]->position();
-							CPoint crossProduct = v1 ^ v2;
-							logFunc("        Cross product result: (" + std::to_string(crossProduct[0]) + ", " + 
-								std::to_string(crossProduct[1]) + ", " + 
-								std::to_string(crossProduct[2]) + ")");
-							normal += crossProduct;
+				}
+				
+				if (missingVertex) {
+					logFunc("    Skipping normal normalization due to calculation errors");
+					continue;
+				}
+				
+				logFunc("    Normalizing normals...");
+				normal = normal * 0.25;
+				double normalNorm = normal.norm();
+				if (normalNorm < 1e-10) {
+					logFunc("      Warning: Very small normal norm: " + std::to_string(normalNorm));
+					continue;
+				}
+				normal /= normalNorm;
+				logFunc("      Normalized normal: (" + std::to_string(normal[0]) + ", " + 
+					std::to_string(normal[1]) + ", " + std::to_string(normal[2]) + ")");
 							
-							v1 = fVs[(vIndex+1)%4]->position() - fVs[vIndex]->position();
-							v2 = fVs[(vIndex+3)%4]->position() - fVs[vIndex]->position();
-							crossProduct = v1 ^ v2;
-							fNormal += crossProduct;
-						} catch (const std::exception& e) {
-							logFunc("        Exception during cross product calculation: " + std::string(e.what()));
-						} catch (...) {
-							logFunc("        Unknown exception during cross product calculation");
-						}
-					}
-					
-					logFunc("    Normalizing normals...");
-					normal = normal * 0.25;
-					double normalNorm = normal.norm();
-					if (normalNorm < 1e-10) {
-						logFunc("      Warning: Very small normal norm: " + std::to_string(normalNorm));
-					}
-					normal /= normalNorm;
-					logFunc("      Normalized normal: (" + std::to_string(normal[0]) + ", " + 
-						std::to_string(normal[1]) + ", " + std::to_string(normal[2]) + ")");
-							
-					fNormal = fNormal * 0.25;
-					double fNormalNorm = fNormal.norm();
-					if (fNormalNorm < 1e-10) {
-						logFunc("      Warning: Very small face normal norm: " + std::to_string(fNormalNorm));
-					}
-					fNormal /= fNormalNorm;
-					logFunc("      Normalized face normal: (" + std::to_string(fNormal[0]) + ", " + 
-						std::to_string(fNormal[1]) + ", " + std::to_string(fNormal[2]) + ")");
-					
-					f->normal() = normal;
+				fNormal = fNormal * 0.25;
+				double fNormalNorm = fNormal.norm();
+				if (fNormalNorm < 1e-10) {
+					logFunc("      Warning: Very small face normal norm: " + std::to_string(fNormalNorm));
+					continue;
+				}
+				fNormal /= fNormalNorm;
+				logFunc("      Normalized face normal: (" + std::to_string(fNormal[0]) + ", " + 
+					std::to_string(fNormal[1]) + ", " + std::to_string(fNormal[2]) + ")");
+				
+				f->normal() = normal;
 
-					double theta = normal * fNormal / (normalNorm * fNormalNorm);
-					theta = theta < -1 ? -1 : theta;
-					theta = theta > 1 ? 1 : theta;
-					double angle = acos(theta)/3.1415926*180;
-					logFunc("      Angle between normals: " + std::to_string(angle) + " degrees");
+				double theta = normal * fNormal / (normalNorm * fNormalNorm);
+				theta = theta < -1 ? -1 : theta;
+				theta = theta > 1 ? 1 : theta;
+				double angle = acos(theta)/3.1415926*180;
+				logFunc("      Angle between normals: " + std::to_string(angle) + " degrees");
 
-					if (f->neighbor_hs[0] == h->id())
+				if (f->neighbor_hs[0] == h->id())
+				{
+					if (angle > 90)
 					{
-						if (angle > 90)
-						{
-							logFunc("      Flipping face " + std::to_string(f->id()) + " normals (angle = " + std::to_string(angle) + ")");
-							int tempId = f->vs[0];
-							f->vs[0] = f->vs[3];
-							f->vs[3] = tempId;
-							tempId = f->vs[1];
-							f->vs[1] = f->vs[2];
-							f->vs[2] = tempId;
+						logFunc("      Flipping face " + std::to_string(f->id()) + " normals (angle = " + std::to_string(angle) + ")");
+						int tempId = f->vs[0];
+						f->vs[0] = f->vs[3];
+						f->vs[3] = tempId;
+						tempId = f->vs[1];
+						f->vs[1] = f->vs[2];
+						f->vs[2] = tempId;
 
-							int tempEId = f->es[0];
-							f->es[0] = f->es[3];
-							f->es[3] = tempEId;
-							tempEId = f->es[1];
-							f->es[1] = f->es[2];
-							f->es[2] = tempEId;
-							logFunc("      Face vertices and edges reordered successfully");
-						}
+						int tempEId = f->es[0];
+						f->es[0] = f->es[3];
+						f->es[3] = tempEId;
+						tempEId = f->es[1];
+						f->es[1] = f->es[2];
+						f->es[2] = tempEId;
+						logFunc("      Face vertices and edges reordered successfully");
 					}
 				}
 			}

@@ -896,7 +896,47 @@ namespace HMeshLib
 			}
 		}
 
-		/*delete the elements*/
+		// 在删除元素之前先完成所有需要访问映射表的操作
+		log("Starting marking element attributes");
+		try {
+			log("New faces count: " + std::to_string(newfs.size()));
+			mark_elements_attribute_collapse(newfs);
+			log("Element attribute marking completed");
+			
+			log("Starting marking singularities");
+			mesh->singularities = mesh->mark_singularity();
+			log("Singularities marking completed: " + std::to_string(mesh->singularities.size()) + " singularities found");
+			
+			// 在这里执行其他需要映射表的操作
+			// 验证映射表完整性
+			for (int i = 0; i < newfs.size(); i++) {
+				F* f = newfs[i];
+				log("Checking face " + std::to_string(f->id()));
+				log("  vs size: " + std::to_string(f->vs.size()));
+				log("  es size: " + std::to_string(f->es.size()));
+				log("  neighbor_hs size: " + std::to_string(f->neighbor_hs.size()));
+				// 检查顶点是否都有效
+				for (int j = 0; j < f->vs.size(); j++) {
+					if (f->vs[j] < 0 || f->vs[j] >= mesh->maxVid()) {
+						log("  Warning: Invalid vertex ID: " + std::to_string(f->vs[j]));
+					}
+				}
+				// 检查边是否都有效
+				for (int j = 0; j < f->es.size(); j++) {
+					if (f->es[j] < 0 || f->es[j] >= mesh->maxEid()) {
+						log("  Warning: Invalid edge ID: " + std::to_string(f->es[j]));
+					}
+				}
+			}
+		}
+		catch (const std::exception& e) {
+			log("Exception occurred during attribute marking: " + std::string(e.what()));
+		}
+		catch (...) {
+			log("Unknown exception occurred during attribute marking");
+		}
+
+		// 执行完所有需要访问映射表的操作后，才开始删除元素
 		log("Starting deletion operations");
 		//delete hex
 		std::list<H*>::iterator hite = mesh->hs.begin();
@@ -976,47 +1016,9 @@ namespace HMeshLib
 			}
 		}
 		log("Deletion operations completed");
-
-		log("Starting marking element attributes");
-		try {
-			log("New faces count: " + std::to_string(newfs.size()));
-			mark_elements_attribute_collapse(newfs);
-			log("Element attribute marking completed");
-			
-			log("Starting marking singularities");
-			mesh->singularities = mesh->mark_singularity();
-			log("Singularities marking completed: " + std::to_string(mesh->singularities.size()) + " singularities found");
-		}
-		catch (const std::exception& e) {
-			log("Exception occurred: " + std::string(e.what()));
-		}
-		catch (...) {
-			log("Unknown exception occurred during post-processing");
-		}
 		
 		log("Sheet collapse execution completed");
-
-		for (int i = 0; i < newfs.size(); i++) {
-			F* f = newfs[i];
-			log("Checking face " + std::to_string(f->id()));
-			log("  vs size: " + std::to_string(f->vs.size()));
-			log("  es size: " + std::to_string(f->es.size()));
-			log("  neighbor_hs size: " + std::to_string(f->neighbor_hs.size()));
-			// 检查顶点是否都有效
-			for (int j = 0; j < f->vs.size(); j++) {
-				if (f->vs[j] < 0 || f->vs[j] >= mesh->maxVid()) {
-					log("  Warning: Invalid vertex ID: " + std::to_string(f->vs[j]));
-				}
-			}
-			// 检查边是否都有效
-			for (int j = 0; j < f->es.size(); j++) {
-				if (f->es[j] < 0 || f->es[j] >= mesh->maxEid()) {
-					log("  Warning: Invalid edge ID: " + std::to_string(f->es[j]));
-				}
-			}
-		}
 	}
-
 
 	template<typename M>
 	double sheet_operation<M>::vector_angle(CPoint a, CPoint b)

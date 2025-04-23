@@ -84,7 +84,11 @@
         "xutility": "cpp",
         "queue": "cpp",
         "random": "cpp",
-        "future": "cpp"
+        "future": "cpp",
+        "coroutine": "cpp",
+        "resumable": "cpp",
+        "mprealsupport": "cpp",
+        "nonlinearoptimization": "cpp"
     },
     "cmake.sourceDirectory": "F:/RL_HMesh",
     "cmake.generator": "Visual Studio 17 2022",
