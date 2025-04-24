@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build_debug/Debug/RL_Mesh_demo.exe",
-            "args": ["F:/RL_HMesh/data/3torus_0.Qhex"],
+            "args": ["F://RL_HMesh//data//cube2.Qhex"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

@@ -84,7 +84,7 @@ namespace HMeshLib
 			m_boundary_id = 0;
 
 			m_feature_vertex = 0;  // 添加对m_feature_vertex的初始化
-			//m_is_delete = false;   // 同时初始化其他未初始化的成员
+			m_is_delete = false;   // 同时初始化其他未初始化的成员
 			//m_sheet_inflate = false;
 			//m_newv = 0;
 			//m_sheet = 0;
@@ -181,6 +181,7 @@ namespace HMeshLib
 			m_singularity_id = 0;
 			m_saved = false;
 			m_this_sheet = false;
+			m_is_delete = false;
 			m_sharp = 0;
 			m_stc = 0;
 		};

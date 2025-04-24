@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
         std::cout << "Current build mode: " << build_mode << std::endl;
         
         // Create base log directory
-        std::string log_base_dir = "F:/RL_HMesh/logs";
+        std::string log_base_dir = "F://RL_HMesh//logs";
         system(("mkdir \"" + log_base_dir + "\" 2>NUL").c_str());
         
         // 根据构建模式创建子目录
@@ -168,7 +168,6 @@ int main(int argc, char* argv[])
         }
         int pos = mesh_name.rfind("/", mesh_name.length());
         path = mesh_name.substr(0, pos+1);
-        std::cout << "Mesh file: " << mesh_name << std::endl;
 
         for(int episode = 0; episode < 1; episode++){
             TMesh tmesh;
@@ -178,7 +177,7 @@ int main(int argc, char* argv[])
             {
                 std::cout << "Loading mesh file: " << mesh_name << std::endl;
                 tmesh.load_Qhex(mesh_name.c_str());
-                std::cout << "Mesh loaded, checking mesh data..." << std::endl;
+                //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
                 
                 // 使用正确的方法访问网格数据
                 std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
@@ -196,7 +195,7 @@ int main(int argc, char* argv[])
             int current_singularity_num = 0;
             float total_reward = 0.0;
             State state;
-            std::cout << "Initial state:" << std::endl;
+            //std::cout << "Initial state:" << std::endl;
             state.print();
             
             // First reset all edge sheet attributes
@@ -211,6 +210,11 @@ int main(int argc, char* argv[])
             calc_state(&tmesh, state, sheet_op);
             std::cout << "State calculation complete, current state:" << std::endl;
             state.print();
+
+            // std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
+            // std::cout << "Edge count: " << tmesh.es.size() << std::endl;
+            // std::cout << "Face count: " << tmesh.fs.size() << std::endl;
+            // std::cout << "Cell count: " << tmesh.hs.size() << std::endl;
 
             std::cout << "Generating singularity numbers..." << std::endl;
             get_singularity_num_op.generate_singularity_number(&tmesh);
@@ -234,7 +238,12 @@ int main(int argc, char* argv[])
                 int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op);
                 debug_log << "State size after action: " << state.size() << std::endl;
                 std::cout << "Action result: " << done << std::endl;
-                
+
+                // std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
+                // std::cout << "Edge count: " << tmesh.es.size() << std::endl;
+                // std::cout << "Face count: " << tmesh.fs.size() << std::endl;
+                // std::cout << "Cell count: " << tmesh.hs.size() << std::endl;
+
                 if(done==0){
                     std::cout << "Critical error: sheet energy <= 0. Ending episode with penalty." << std::endl;
                     total_reward += -1000000.0f; // Large negative reward
@@ -259,6 +268,7 @@ int main(int argc, char* argv[])
                 std::cout << "Log completed" << std::endl;
                 agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
                 std::cout << "Memory update completed" << std::endl;
+
             }
             
             if (state.size() > 0) {
@@ -268,14 +278,25 @@ int main(int argc, char* argv[])
             } else {
                 std::cout << "Training abnormally ended, state is empty" << std::endl;
             }
+
+        // save to data\results
+        std::string result_dir = "F://RL_HMesh//data//results//";
+        system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
+        
+        // 从mesh_name提取文件名部分
+        std::string base_filename = mesh_name.substr(mesh_name.find_last_of("/\\") + 1);
+        base_filename = base_filename.substr(0, base_filename.find_last_of("."));
+        
+        std::string result_file = result_dir + base_filename + "_" + std::to_string(episode) + ".Qhex";
+        std::cout << "Saving collapsed  mesh to: " << result_file << std::endl;
+        tmesh.write_Qhex(result_file.c_str());
         }
         std::cout << "Training completed." << std::endl;
-        
+
         // Restore cout and cerr at the end of training
         std::cout.rdbuf(cout_buf);
         std::cerr.rdbuf(cerr_buf);
         std::cout << "Training completed. Logs saved to " << log_dir << std::endl;
-        
         return 0;
     }
     catch(py::error_already_set &e) {

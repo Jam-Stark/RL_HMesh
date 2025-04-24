@@ -1027,6 +1027,25 @@ namespace HMeshLib
 
 	}
 
+	// Structure to hold temporary data during single-pass loading
+	struct TempHexData {
+		int id;
+		std::vector<int> v_ids;
+		std::string str_attr;
+	};
+	struct TempEdgeData {
+		int v0_id, v1_id;
+		std::string str_attr;
+	};
+	struct TempFaceData {
+		std::vector<int> v_ids;
+		std::string str_attr;
+	};
+	struct TempCornerData {
+		int v_id;
+		std::string str_attr;
+	};
+
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::load_Qhex(const char* input)
 	{
@@ -1301,70 +1320,127 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V, E, F, H>::write_Qhex(const char* output)
 	{
-		for (std::list<V*>::iterator vite = vs.begin(); vite != vs.end(); vite++)
-		{
-			V* v = *vite;
-			v->_to_string();
-		}
-		for (std::list<E*>::iterator eite = es.begin(); eite != es.end(); eite++)
-		{
-			E* e = *eite;
-			e->_to_string();
-		}
-		for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
-		{
-			H* h = *hite;
-			h->_to_string();
-		}
-
-		std::fstream _os(output, std::fstream::out);
-
-		if (_os.fail())
-		{
-			fprintf(stderr, "Error in opening file %s\n", output);
-			return;
-		}
-		//output vertices
-		for (std::list<V*>::iterator vite = vs.begin(); vite != vs.end();vite++)
-		{
-			V* v = *vite;
-			CPoint p = v->position();
-			_os << "Vertex " << v->id() << " " << p[0] << " " << p[1] << " " << p[2];
-			if (v->string().size() > 0)
-			{
-				_os << " " << "{" << v->string() << "}";
+		// 创建日志函数
+		auto logFunc = [](const std::string& msg) {
+			// 检查是否存在topoMeshLog函数
+			if (HMeshLib::getTopoMeshLog()) {
+				HMeshLib::topoMeshLog(msg);
 			}
-			_os << std::endl;
-		}
-		//output hex
-		for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
-		{
-			H* h = *hite;
-			_os << "Hex " << h->id();
-			for (int i = 0; i < 8; i++)
-			{
-				_os << " " << h->vs[i];
+			// 检查是否存在sheet_operation日志函数
+			else if (HMeshLib::getSheetLog()) {
+				HMeshLib::log(msg);
 			}
-			if (h->string().size() > 0)
+		};
+
+		try {
+			logFunc("Starting write_Qhex to file: " + std::string(output));
+			
+			// 准备要写入的数据
+			logFunc("Preparing data for output - converting to string format");
+			for (std::list<V*>::iterator vite = vs.begin(); vite != vs.end(); vite++)
 			{
-				_os << " " << "{" << h->string() << "}";
+				V* v = *vite;
+				v->_to_string();
 			}
-			_os << std::endl;
-		}
-
-		//output edge
-		for (std::list<E*>::iterator eite = es.begin(); eite != es.end(); eite++)
-		{
-			E* e = *eite;
-			if (e->string().size() > 0)
+			logFunc("Vertices data prepared: " + std::to_string(vs.size()) + " vertices");
+			
+			for (std::list<E*>::iterator eite = es.begin(); eite != es.end(); eite++)
 			{
-				_os << "Edge " << e->vs[0] << " " << e->vs[1] << " ";
-				_os << "{" << e->string() << "}" << std::endl;
+				E* e = *eite;
+				e->_to_string();
 			}
+			logFunc("Edges data prepared: " + std::to_string(es.size()) + " edges");
+			
+			for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
+			{
+				H* h = *hite;
+				h->_to_string();
+			}
+			logFunc("Hexes data prepared: " + std::to_string(hs.size()) + " hexes");
+
+			// 打开输出文件
+			logFunc("Opening output file: " + std::string(output));
+			std::fstream _os(output, std::fstream::out);
+
+			if (_os.fail())
+			{
+				logFunc("ERROR: Failed to open output file: " + std::string(output));
+				fprintf(stderr, "Error in opening file %s\n", output);
+				return;
+			}
+			
+			// 输出顶点数据
+			logFunc("Writing vertices data to file...");
+			int vertexCount = 0;
+			for (std::list<V*>::iterator vite = vs.begin(); vite != vs.end();vite++)
+			{
+				V* v = *vite;
+				CPoint p = v->position();
+				_os << "Vertex " << v->id() << " " << p[0] << " " << p[1] << " " << p[2];
+				if (v->string().size() > 0)
+				{
+					_os << " " << "{" << v->string() << "}";
+				}
+				_os << std::endl;
+				vertexCount++;
+				
+				// 每写入100个顶点记录一次日志
+				if (vertexCount % 100 == 0) {
+					logFunc("  Wrote " + std::to_string(vertexCount) + " vertices...");
+				}
+			}
+			logFunc("Completed writing " + std::to_string(vertexCount) + " vertices");
+			
+			// 输出六面体数据
+			logFunc("Writing hex data to file...");
+			int hexCount = 0;
+			for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
+			{
+				H* h = *hite;
+				_os << "Hex " << h->id();
+				for (int i = 0; i < 8; i++)
+				{
+					_os << " " << h->vs[i];
+				}
+				if (h->string().size() > 0)
+				{
+					_os << " " << "{" << h->string() << "}";
+				}
+				_os << std::endl;
+				hexCount++;
+				
+				// 每写入100个六面体记录一次日志
+				if (hexCount % 100 == 0) {
+					logFunc("  Wrote " + std::to_string(hexCount) + " hexes...");
+				}
+			}
+			logFunc("Completed writing " + std::to_string(hexCount) + " hexes");
+
+			// 输出边数据
+			logFunc("Writing edge data to file...");
+			int edgeCount = 0;
+			for (std::list<E*>::iterator eite = es.begin(); eite != es.end(); eite++)
+			{
+				E* e = *eite;
+				if (e->string().size() > 0)
+				{
+					_os << "Edge " << e->vs[0] << " " << e->vs[1] << " ";
+					_os << "{" << e->string() << "}" << std::endl;
+					edgeCount++;
+				}
+			}
+			logFunc("Completed writing " + std::to_string(edgeCount) + " edges with string attributes");
+
+			// 关闭文件
+			_os.close();
+			logFunc("File closed successfully: " + std::string(output));
 		}
-
-		_os.close();
-
+		catch (const std::exception& e) {
+			logFunc("Exception occurred during write_Qhex: " + std::string(e.what()));
+		}
+		catch (...) {
+			logFunc("Unknown exception occurred during write_Qhex");
+		}
 	}
 
 	/*	
@@ -2020,7 +2096,7 @@ namespace HMeshLib
 					", value=" + (pair.second ? "valid ptr" : "NULL");
 				HMeshLib::topoMeshLog(msg);
 				
-				if (count > 20) {
+				if (false) {
 					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_edges.size() - 20) + " more items");
 					break;
 				}
@@ -2039,7 +2115,7 @@ namespace HMeshLib
 					", value=" + (pair.second ? "valid ptr" : "NULL");
 				HMeshLib::topoMeshLog(msg);
 				
-				if (count > 20) {
+				if (false) {
 					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_faces.size() - 20) + " more items");
 					break;
 				}
@@ -2058,7 +2134,7 @@ namespace HMeshLib
 					", value=" + (pair.second ? "valid ptr" : "NULL");
 				HMeshLib::topoMeshLog(msg);
 				
-				if (count > 20) {
+				if (count > 500) {
 					HMeshLib::topoMeshLog("  ... and " + std::to_string(m_map_hexs.size() - 20) + " more items");
 					break;
 				}

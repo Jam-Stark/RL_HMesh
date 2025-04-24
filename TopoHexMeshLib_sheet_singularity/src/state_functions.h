@@ -129,13 +129,15 @@ std::string format_matrix(const State& state) {
 void log(int episode, const State& state, int action, const State& next_state, float reward) {
     // 从环境变量获取会话ID
     char* session_id_env = nullptr;
+    const char* build_mode_env = std::getenv("RL_HMESH_BUILD_MODE");
+    std::string build_mode = build_mode_env ? build_mode_env : "Release";
     size_t len = 0;
     _dupenv_s(&session_id_env, &len, "RL_HMESH_SESSION_ID");
     std::string session_id = session_id_env ? std::string(session_id_env) : "unknown";
     if (session_id_env) free(session_id_env);
     
     // 创建当前会话的日志目录
-    std::string log_dir = "f:\\RL_HMesh\\logs\\" + session_id;
+    std::string log_dir = "f:\\RL_HMesh\\logs\\"+ build_mode+"\\" + session_id;
     std::string log_filename = log_dir + "\\training.log";
     
     // 确保目录存在，如果不存在则创建
@@ -327,14 +329,16 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
     }
     else {
         done = 2; // 2表示优化未结束，正常选择下一个sheet
+
         sheet_op.collapse_one_sheet2(get_sheet_byId(&tmesh, state.sheet_id[action], sheet_op));
-        std::cout << "collapse sheet: " << state.sheet_id[action] << std::endl;
+        std::cout << "collapse sheet: " << state.sheet_id[action]<<" done" << std::endl;
+
         sheet_op.get_mesh_sheet_number();
         std::cout << "get_mesh_sheet_number" << std::endl;
+
         get_singularity_num_op.generate_singularity_number(&tmesh);
         std::cout << "generate_singularity_number" << std::endl;
-        tmesh.write_Qhex("data/test.Qhex");
-        std::cout << "write_Qhex" << std::endl;
+
         state.clear();
         std::cout << "clear state" << std::endl;
         calc_state(&tmesh, state, sheet_op);

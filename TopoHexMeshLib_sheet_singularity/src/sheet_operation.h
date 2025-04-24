@@ -345,7 +345,7 @@ namespace HMeshLib
 						try {
 							// 检查六面体ID是否有效
 							if (f->neighbor_hs[fhIndex] < 0 || f->neighbor_hs[fhIndex] >= mesh->maxHid()) {
-								log("Error: Face " + std::to_string(f->id()) + " has invalid adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]));
+								log("Error: Face " + std::to_string(f->id()) + " has invalid adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]) + " with max Hid: "+ std::to_string(mesh->maxHid()));
 								continue;
 							}
 							
@@ -662,6 +662,8 @@ namespace HMeshLib
 		std::set<F*> delete_fs;//delete faces
 		std::set<E*> delete_es;//delete edges
 		std::set<V*> delete_vs;//delete vs
+		
+		// 先收集需要删除的六面体及其关联的元素
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
 		{
 			E* e = sheet[eIndex];
@@ -671,7 +673,7 @@ namespace HMeshLib
 			for (int ehIndex = 0; ehIndex < e->neighbor_hs.size(); ehIndex++)
 			{
 				H* h = mesh->idHexs(e->neighbor_hs[ehIndex]);
-				if (h->is_delete()) continue;
+				if ( h->is_delete()) continue;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 
 				h->is_delete() = true;
 				h->sheetId() = 1;
@@ -681,23 +683,34 @@ namespace HMeshLib
 				for (int hvIndex = 0; hvIndex < h->vs.size(); hvIndex++)
 				{
 					V* hv = mesh->idVertices(h->vs[hvIndex]);
-					hv->is_delete() = true;
-					delete_vs.insert(hv);
+
+						hv->is_delete() = true;
+						delete_vs.insert(hv);
+
 				}
 				for (int heIndex = 0; heIndex < h->es.size(); heIndex++)
 				{
 					E* he = mesh->idEdges(h->es[heIndex]);
-					he->is_delete() = true;
-					delete_es.insert(he);
+
+						he->is_delete() = true;
+						delete_es.insert(he);
+
 				}
 				for (int hfIndex = 0; hfIndex < h->fs.size(); hfIndex++)
 				{
 					F* hf = mesh->idFaces(h->fs[hfIndex]);
-					hf->is_delete() = true;
-					delete_fs.insert(hf);
+
+						hf->is_delete() = true;
+						delete_fs.insert(hf);
+					
 				}
 			}
 		}
+		log("loaded Hex count: " + std::to_string(delete_hs.size()));
+		log("loaded Face count: " + std::to_string(delete_fs.size()));
+		log("loaded Edge count: " + std::to_string(delete_es.size()));
+		log("loaded Vertex count: " + std::to_string(delete_vs.size()));
+
 		/*exit if there is self-intersection*/
 		for (std::set<H*>::iterator hite = delete_hs.begin(); hite != delete_hs.end(); hite++)
 		{
@@ -715,6 +728,20 @@ namespace HMeshLib
 			{
 				log("Self-intersection detected at hex id: " + std::to_string(h->id()));
 				std::cout << "The current sheet has self-intersection" << std::endl;
+				
+				// 清除之前设置的is_delete标记，因为我们不会继续折叠
+				for (std::set<H*>::iterator h_iter = delete_hs.begin(); h_iter != delete_hs.end(); h_iter++) {
+					if (*h_iter) (*h_iter)->is_delete() = false;
+				}
+				for (std::set<F*>::iterator f_iter = delete_fs.begin(); f_iter != delete_fs.end(); f_iter++) {
+					if (*f_iter) (*f_iter)->is_delete() = false;
+				}
+				for (std::set<E*>::iterator e_iter = delete_es.begin(); e_iter != delete_es.end(); e_iter++) {
+					if (*e_iter) (*e_iter)->is_delete() = false;
+				}
+				for (std::set<V*>::iterator v_iter = delete_vs.begin(); v_iter != delete_vs.end(); v_iter++) {
+					if (*v_iter) (*v_iter)->is_delete() = false;
+				}
 				return;
 			}
 		}
@@ -742,14 +769,19 @@ namespace HMeshLib
 			for (int evIndex = 0; evIndex < 2; evIndex++)
 			{
 				V* oldv = evs[evIndex];
+				if (!oldv) continue;
+				
 				//change edge relations
 				for (int veIndex = 0; veIndex < oldv->neighbor_es.size(); veIndex++)
 				{
 					E* ve = mesh->idEdges(oldv->neighbor_es[veIndex]);
 					if (ve->is_delete()) continue;
 					int vevIndex = ve->vertexIndex(oldv->id());
-					ve->vs[vevIndex] = newv->id();
-					newv->neighbor_es.push_back(ve->id());
+					if (vevIndex != -1) {
+						ve->vs[vevIndex] = newv->id();
+						newv->neighbor_es.push_back(ve->id());
+						
+					}
 				}
 				//change face relations
 				for (int vfIndex = 0; vfIndex < oldv->neighbor_fs.size(); vfIndex++)
@@ -763,6 +795,7 @@ namespace HMeshLib
 					}
 					vf->vs[vfvIndex] = newv->id();
 					newv->neighbor_fs.push_back(vf->id());
+					
 				}
 				//change hex relations
 				for (int vhIndex = 0; vhIndex < oldv->neighbor_hs.size(); vhIndex++)
@@ -776,6 +809,7 @@ namespace HMeshLib
 					}
 					vh->vs[vhvIndex] = newv->id();
 					newv->neighbor_hs.push_back(vh->id());
+					
 				}
 			}
 		}
@@ -807,6 +841,13 @@ namespace HMeshLib
 					fs = { hf,parallel_f };
 				}
 			}
+			
+			// 如果没有找到符合条件的面，继续下一个六面体
+			if (fs.empty()) {
+				log("  No suitable faces found for hex " + std::to_string(h->id()));
+				continue;
+			}
+			
 			/*create the new edgs*/
 			F* f = fs[0];
 			std::vector<V*> FNewVs;
@@ -900,13 +941,19 @@ namespace HMeshLib
 		log("Starting marking element attributes");
 		try {
 			log("New faces count: " + std::to_string(newfs.size()));
-			mark_elements_attribute_collapse(newfs);
+			//mark_elements_attribute_collapse(newfs);
 			log("Element attribute marking completed");
 			
 			log("Starting marking singularities");
-			mesh->singularities = mesh->mark_singularity();
+			//mesh->singularities = mesh->mark_singularity();
 			log("Singularities marking completed: " + std::to_string(mesh->singularities.size()) + " singularities found");
 			
+			// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
+			log("Mesh vertex count: " + std::to_string(mesh->vs.size()));
+			log("Mesh edge count: " + std::to_string(mesh->es.size()));
+			log("Mesh face count: " + std::to_string(mesh->fs.size()));
+			log("Mesh hexahedron count: " + std::to_string(mesh->hs.size()));
+
 			// 在这里执行其他需要映射表的操作
 			// 验证映射表完整性
 			for (int i = 0; i < newfs.size(); i++) {
@@ -928,6 +975,11 @@ namespace HMeshLib
 					}
 				}
 			}
+			// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
+			log("Mesh vertex count before deletion: " + std::to_string(mesh->vs.size()));
+			log("Mesh edge count before deletion: " + std::to_string(mesh->es.size()));
+			log("Mesh face count before deletion: " + std::to_string(mesh->fs.size()));
+			log("Mesh hexahedron count before deletion: " + std::to_string(mesh->hs.size()));
 		}
 		catch (const std::exception& e) {
 			log("Exception occurred during attribute marking: " + std::string(e.what()));
@@ -938,7 +990,150 @@ namespace HMeshLib
 
 		// 执行完所有需要访问映射表的操作后，才开始删除元素
 		log("Starting deletion operations");
+		
+		// 收集所有被标记为删除的元素的ID
+		std::set<int> hex_ids_to_delete;
+		std::set<int> face_ids_to_delete;
+		std::set<int> edge_ids_to_delete;
+		std::set<int> vertex_ids_to_delete;
+		
+		for (auto h : delete_hs) {
+			if (h) hex_ids_to_delete.insert(h->id());
+		}
+		
+		for (auto f : delete_fs) {
+			if (f) face_ids_to_delete.insert(f->id());
+		}
+		
+		for (auto e : delete_es) {
+			if (e) edge_ids_to_delete.insert(e->id());
+		}
+		
+		for (auto v : delete_vs) {
+			if (v) vertex_ids_to_delete.insert(v->id());
+		}
+		
+		log("IDs to delete - Hexes: " + std::to_string(hex_ids_to_delete.size()) + 
+			", Faces: " + std::to_string(face_ids_to_delete.size()) + 
+			", Edges: " + std::to_string(edge_ids_to_delete.size()) + 
+			", Vertices: " + std::to_string(vertex_ids_to_delete.size()));
+
+		/*test if the delete is ok with out topo relation update here
+		// 更新关联关系，移除被删除元素的引用
+		for (auto h : mesh->hs) {
+			if (h && !h->is_delete()) {
+				// 检查并更新六面体的面
+				for (int i = 0; i < h->fs.size(); i++) {
+					if (face_ids_to_delete.find(h->fs[i]) != face_ids_to_delete.end()) {
+						log("Warning: Hex " + std::to_string(h->id()) + " references deleted face " + std::to_string(h->fs[i]));
+					}
+				}
+				
+				// 检查并更新六面体的边
+				for (int i = 0; i < h->es.size(); i++) {
+					if (edge_ids_to_delete.find(h->es[i]) != edge_ids_to_delete.end()) {
+						log("Warning: Hex " + std::to_string(h->id()) + " references deleted edge " + std::to_string(h->es[i]));
+					}
+				}
+				
+				// 检查并更新六面体的顶点
+				for (int i = 0; i < h->vs.size(); i++) {
+					if (vertex_ids_to_delete.find(h->vs[i]) != vertex_ids_to_delete.end()) {
+						log("Warning: Hex " + std::to_string(h->id()) + " references deleted vertex " + std::to_string(h->vs[i]));
+					}
+				}
+			}
+		}
+		
+		for (auto f : mesh->fs) {
+			if (f && !f->is_delete()) {
+				// 检查并更新面的边
+				for (int i = 0; i < f->es.size(); i++) {
+					if (edge_ids_to_delete.find(f->es[i]) != edge_ids_to_delete.end()) {
+						log("Warning: Face " + std::to_string(f->id()) + " references deleted edge " + std::to_string(f->es[i]));
+					}
+				}
+				
+				// 检查并更新面的顶点
+				for (int i = 0; i < f->vs.size(); i++) {
+					if (vertex_ids_to_delete.find(f->vs[i]) != vertex_ids_to_delete.end()) {
+						log("Warning: Face " + std::to_string(f->id()) + " references deleted vertex " + std::to_string(f->vs[i]));
+					}
+				}
+				
+				// 更新面的相邻六面体列表
+				std::vector<int> updated_neighbor_hs;
+				for (auto hid : f->neighbor_hs) {
+					if (hex_ids_to_delete.find(hid) == hex_ids_to_delete.end()) {
+						updated_neighbor_hs.push_back(hid);
+					}
+				}
+				f->neighbor_hs = updated_neighbor_hs;
+			}
+		}
+		
+		for (auto e : mesh->es) {
+			if (e && !e->is_delete()) {
+				// 检查并更新边的顶点
+				for (int i = 0; i < e->vs.size(); i++) {
+					if (vertex_ids_to_delete.find(e->vs[i]) != vertex_ids_to_delete.end()) {
+						log("Warning: Edge " + std::to_string(e->id()) + " references deleted vertex " + std::to_string(e->vs[i]));
+					}
+				}
+				
+				// 更新边的相邻面列表
+				std::vector<int> updated_neighbor_fs;
+				for (auto fid : e->neighbor_fs) {
+					if (face_ids_to_delete.find(fid) == face_ids_to_delete.end()) {
+						updated_neighbor_fs.push_back(fid);
+					}
+				}
+				e->neighbor_fs = updated_neighbor_fs;
+				
+				// 更新边的相邻六面体列表
+				std::vector<int> updated_neighbor_hs;
+				for (auto hid : e->neighbor_hs) {
+					if (hex_ids_to_delete.find(hid) == hex_ids_to_delete.end()) {
+						updated_neighbor_hs.push_back(hid);
+					}
+				}
+				e->neighbor_hs = updated_neighbor_hs;
+			}
+		}
+		
+		for (auto v : mesh->vs) {
+			if (v && !v->is_delete()) {
+				// 更新顶点的相邻边列表
+				std::vector<int> updated_neighbor_es;
+				for (auto eid : v->neighbor_es) {
+					if (edge_ids_to_delete.find(eid) == edge_ids_to_delete.end()) {
+						updated_neighbor_es.push_back(eid);
+					}
+				}
+				v->neighbor_es = updated_neighbor_es;
+				
+				// 更新顶点的相邻面列表
+				std::vector<int> updated_neighbor_fs;
+				for (auto fid : v->neighbor_fs) {
+					if (face_ids_to_delete.find(fid) == face_ids_to_delete.end()) {
+						updated_neighbor_fs.push_back(fid);
+					}
+				}
+				v->neighbor_fs = updated_neighbor_fs;
+				
+				// 更新顶点的相邻六面体列表
+				std::vector<int> updated_neighbor_hs;
+				for (auto hid : v->neighbor_hs) {
+					if (hex_ids_to_delete.find(hid) == hex_ids_to_delete.end()) {
+						updated_neighbor_hs.push_back(hid);
+					}
+				}
+				v->neighbor_hs = updated_neighbor_hs;
+			}
+		}
+		*/
 		//delete hex
+		int deleted_hexes = 0;
 		std::list<H*>::iterator hite = mesh->hs.begin();
 		while (hite != mesh->hs.end())
 		{
@@ -946,19 +1141,23 @@ namespace HMeshLib
 			if (h == NULL)
 			{
 				hite = mesh->hs.erase(hite);
+				deleted_hexes++;
 			}
 			else if (h->is_delete())
 			{
 				mesh->m_map_hexs.erase(h->id());
 				hite = mesh->hs.erase(hite);
+				deleted_hexes++;
 			}
 			else
 			{
 				++hite;
 			}
 		}
+		log("Deleted " + std::to_string(deleted_hexes) + " hexahedra");
 
 		//delete face
+		int deleted_faces = 0;
 		std::list<F*>::iterator fite = mesh->fs.begin();
 		while (fite != mesh->fs.end())
 		{
@@ -966,18 +1165,23 @@ namespace HMeshLib
 			if (f == NULL)
 			{
 				fite = mesh->fs.erase(fite);
+				deleted_faces++;
 			}
 			else if (f->is_delete())
 			{
 				mesh->m_map_faces.erase(f->id());
 				fite = mesh->fs.erase(fite);
+				deleted_faces++;
 			}
 			else
 			{
 				++fite;
 			}
 		}
+		log("Deleted " + std::to_string(deleted_faces) + " faces");
+		
 		//delete edge
+		int deleted_edges = 0;
 		std::list<E*>::iterator eite = mesh->es.begin();
 		while (eite != mesh->es.end())
 		{
@@ -985,18 +1189,24 @@ namespace HMeshLib
 			if (e == NULL)
 			{
 				eite = mesh->es.erase(eite);
+				deleted_edges++;
 			}
-			else if (e->is_delete())
+			else if (edge_ids_to_delete.find(e->id()) != edge_ids_to_delete.end() && e->is_delete())
 			{
+				// 只有在ID列表中且标记为删除的边才被删除
 				mesh->m_map_edges.erase(e->id());
 				eite = mesh->es.erase(eite);
+				deleted_edges++;
 			}
 			else
 			{
 				++eite;
 			}
 		}
+		log("Deleted " + std::to_string(deleted_edges) + " edges");
+		
 		//delete vertex
+		int deleted_vertices = 0;
 		std::list<V*>::iterator vite = mesh->vs.begin();
 		while (vite != mesh->vs.end())
 		{
@@ -1004,19 +1214,28 @@ namespace HMeshLib
 			if (v == NULL)
 			{
 				vite = mesh->vs.erase(vite);
+				deleted_vertices++;
 			}
-			else if (v->is_delete())
+			else if (vertex_ids_to_delete.find(v->id()) != vertex_ids_to_delete.end() && v->is_delete())
 			{
+				// 只有在ID列表中且标记为删除的顶点才被删除
 				mesh->m_map_vertices.erase(v->id());
 				vite = mesh->vs.erase(vite);
+				deleted_vertices++;
 			}
 			else
 			{
 				++vite;
 			}
 		}
-		log("Deletion operations completed");
+		log("Deleted " + std::to_string(deleted_vertices) + " vertices");
 		
+		log("Deletion operations completed");
+		// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
+		log("Mesh vertex count: " + std::to_string(mesh->vs.size()));
+		log("Mesh edge count: " + std::to_string(mesh->es.size()));
+		log("Mesh face count: " + std::to_string(mesh->fs.size()));
+		log("Mesh hexahedron count: " + std::to_string(mesh->hs.size()));
 		log("Sheet collapse execution completed");
 	}
 
