@@ -87,8 +87,8 @@ namespace HMeshLib
 			m_is_delete = false;   // 同时初始化其他未初始化的成员
 			//m_sheet_inflate = false;
 			//m_newv = 0;
-			//m_sheet = 0;
-			//m_degree = 0;
+			m_sheet = 0;
+			m_degree = 0;
 			m_mark = false;
 			//m_not_output = false;
 		};
@@ -184,6 +184,7 @@ namespace HMeshLib
 			m_is_delete = false;
 			m_sharp = 0;
 			m_stc = 0;
+			m_sheet=0;
 		};
 		~TE() {};
 

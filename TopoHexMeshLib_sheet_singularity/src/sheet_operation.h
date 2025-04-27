@@ -36,6 +36,11 @@ namespace HMeshLib
         ofs << buffer << " " << msg << std::endl;
     }
 #define MPI 3.141592653589793238
+
+	class MeshFeatures
+	{
+	};
+
 	template<typename M>
 	class sheet_operation
 	{
@@ -56,12 +61,13 @@ namespace HMeshLib
 		void edge_total_angle_policy_collapse(E* e1, E* e2, E* target);
 		void mark_elements_attribute_collapse(std::vector<F*> fs);
 
-        void reset_sheet_attributes() {
-            for (M::MEIterator eite(mesh); !eite.end(); eite++) {
-                E* be = *eite;
-                be->sheet() = 0;
-            }
-        }
+        // void reset_sheet_attributes() {
+        //     for (M::MEIterator eite(mesh); !eite.end(); eite++) {
+        //         E* be = *eite;
+        //         be->sheet() = 0;
+        //     }
+        // }
+		
 		std::vector<E*> get_one_sheet(E* e);
 		int get_mesh_sheet_number();
 		void collapse_one_sheet2(std::vector<E*> sheet);
@@ -72,6 +78,29 @@ namespace HMeshLib
 		void compute_edge_energy();
 		std::vector<std::vector<E*>> get_sheet_parallel_edges(std::vector<E*>sheet);
 		double predict_sheet_collapse_energy(std::vector<E*> sheet);
+		
+		/* get new info from each sheet*/
+		double get_sheet_on_boundary_ratio(std::vector<E*> sheet);
+		double get_sheet_on_feature_ratio(std::vector<E*> sheet);
+		bool sheet_endpoints_are_corners_or_boundary(std::vector<E*> sheet);
+		int get_sheet_adjacent_feature_edges_count(std::vector<E*> sheet);
+
+		//通过计算sheet两端点之间的欧氏距离与sheet的总路径长度的比值来度量曲率
+		double get_sheet_curvature_metric(std::vector<E*> sheet);
+
+		// 计算sheet中的边相邻面之间的法线角度变化的平均值
+		double get_sheet_normal_variation(std::vector<E*> sheet);
+
+		// 计算sheet中边的实际二面角与理想二面角（基于边的属性）之间的平均偏差
+		double get_sheet_dihedral_angle_deviation(std::vector<E*> sheet);
+
+		// 添加计算sheet邻近六面体缩放雅可比指标的函数声明
+		std::pair<double, double> get_sheet_adjacent_hex_jacobian(std::vector<E*> sheet);
+
+		// 计算mesh的各项属性(点 边 面数量 & 几何 & 拓扑各项信息),方便对比算法处理后的mesh和原mesh的对比,检验算法的效果
+		MeshFeatures get_mesh_features();
+
+
 	private:
 		M* mesh;
 		std::string filename;
@@ -2136,7 +2165,7 @@ namespace HMeshLib
 			
 			if (temp_boundary_num < 0)
 			{
-				log("Boundary energy check: temp_boundary_num < 0, not suitable for collapse, returning: -999");
+				log("Boundary energy check: temp_boundary_num < 0, not suitable for collapse, returning: " + std::to_string(cannot_collapse));
 				return -999;
 			}
 			else if (temp_large_num > 0)
@@ -2151,8 +2180,8 @@ namespace HMeshLib
 			}
 			else
 			{
-				log("Other cases, not suitable for collapse, returning: -999");
-				return -999;
+				log("Other cases, not suitable for collapse, returning: " + std::to_string(cannot_collapse));
+				return cannot_collapse;
 			}
 		}
 		catch (const std::exception& e) {
@@ -2165,6 +2194,388 @@ namespace HMeshLib
 		}
 	}
 
+    template <typename M>
+    inline double sheet_operation<M>::get_sheet_on_boundary_ratio(std::vector<E *> sheet)
+    {
+        int is_boundary_count = 0;
 
+		for (int i = 0; i < sheet.size(); i++)
+		{
+			E *e = sheet[i];
+			if (e->boundary())
+			{
+				is_boundary_count++;
+			}
+		}
+		double ratio = is_boundary_count / sheet.size();
+		log("Sheet " + std::to_string(sheet[0]->id()) + " on boundary ratio: " + std::to_string(ratio) + ", Boundary edges: " + std::to_string(is_boundary_count) + ", Total edges: " + std::to_string(sheet.size()));
+		return ratio;
+    }
 
+    template <typename M>
+    inline double sheet_operation<M>::get_sheet_on_feature_ratio(std::vector<E *> sheet)
+    {
+        int is_feature_count = 0;
+		for (int i = 0; i < sheet.size(); i++)
+		{
+			E *e = sheet[i];
+			if (e->sharp())
+			{
+				is_feature_count++;
+			}
+		}
+		double ratio = is_feature_count / sheet.size();
+		log("Sheet " + std::to_string(sheet[0]->id()) + " on feature ratio: " + std::to_string(ratio) + ", Feature edges: " + std::to_string(is_feature_count) + ", Total edges: " + std::to_string(sheet.size()));
+		return ratio;
+    }
+    template <typename M>
+    inline bool sheet_operation<M>::sheet_endpoints_are_corners_or_boundary(std::vector<E *> sheet)
+    {
+        return false;
+    }
+    template <typename M>
+    inline int sheet_operation<M>::get_sheet_adjacent_feature_edges_count(std::vector<E *> sheet)
+    {
+        return 0;
+    }
+    template <typename M>
+    inline double sheet_operation<M>::get_sheet_curvature_metric(std::vector<E *> sheet)
+    {
+        if (sheet.empty()) {
+            return 0.0;
+        }
+
+        try {
+            log("计算Sheet曲率度量(Curvature Metric)...");
+
+            // 方法1：计算端点之间的欧氏距离与路径几何长度的比值
+            // 获取sheet两端顶点
+            E* first_edge = sheet.front();
+            E* last_edge = sheet.back();
+
+            // 检查边是否有效
+            if (!first_edge || !last_edge || first_edge->vs.size() < 2 || last_edge->vs.size() < 2) {
+                log("警告: Sheet端点边无效");
+                return 0.0;
+            }
+
+            // 获取sheet两端的顶点
+            V* start_v = mesh->idVertices(first_edge->vs[0]);
+            V* end_v = mesh->idVertices(last_edge->vs[1]);
+
+            // 确保能找到两端顶点
+            if (!start_v || !end_v) {
+                log("警告: 无法获取sheet端点顶点");
+                return 0.0;
+            }
+
+            // 计算欧氏距离
+            CPoint start_pos = start_v->position();
+            CPoint end_pos = end_v->position();
+            double euclidean_distance = (start_pos - end_pos).norm();
+
+            // 计算sheet的总几何长度
+            double total_length = 0.0;
+            for (auto e : sheet) {
+                if (!e || e->vs.size() < 2) continue;
+                
+                V* v1 = mesh->idVertices(e->vs[0]);
+                V* v2 = mesh->idVertices(e->vs[1]);
+                
+                if (!v1 || !v2) continue;
+                
+                CPoint p1 = v1->position();
+                CPoint p2 = v2->position();
+                total_length += (p1 - p2).norm();
+            }
+
+            if (total_length < 1e-10) {
+                log("警告: Sheet总长度接近零");
+                return 0.0;
+            }
+
+            // 计算曲率度量 - 值接近1表示直线，值越小表示越弯曲
+            double curvature_metric = euclidean_distance / total_length;
+            
+            log("Sheet曲率度量: " + std::to_string(curvature_metric) + 
+                " (欧氏距离: " + std::to_string(euclidean_distance) + 
+                ", 总路径长度: " + std::to_string(total_length) + ")");
+            
+            return curvature_metric; // 0~1之间的值，接近1表示sheet接近直线，值越小表示sheet越弯曲
+        }
+        catch (const std::exception& e) {
+            log("计算sheet曲率度量时发生异常: " + std::string(e.what()));
+            return 0.0;
+        }
+        catch (...) {
+            log("计算sheet曲率度量时发生未知异常");
+            return 0.0;
+        }
+    }
+	template <typename M>
+    inline double sheet_operation<M>::get_sheet_normal_variation(std::vector<E *> sheet)
+    {
+        if (sheet.empty()) {
+            return 0.0;
+        }
+
+        try {
+            log("Computing sheet normal variation...");
+
+            // Calculate normal variation by measuring angle changes between adjacent face normals
+            double total_normal_variation = 0.0;
+            int valid_measurements = 0;
+
+            // For each edge in the sheet
+            for (auto e : sheet) {
+                if (!e) continue;
+                
+                // Skip edges with insufficient adjacent faces
+                if (e->neighbor_fs.size() < 2) continue;
+
+                std::vector<CPoint> face_normals;
+                
+                // Collect normals for all adjacent faces
+                for (int i = 0; i < e->neighbor_fs.size(); ++i) {
+                    F* f = mesh->idFaces(e->neighbor_fs[i]);
+                    if (!f) continue;
+                    
+                    face_normals.push_back(f->normal());
+                }
+                
+                // Calculate angle variation between all pairs of faces
+                for (size_t i = 0; i < face_normals.size(); ++i) {
+                    for (size_t j = i + 1; j < face_normals.size(); ++j) {
+                        CPoint n1 = face_normals[i];
+                        CPoint n2 = face_normals[j];
+                        
+                        // Skip invalid normals
+                        if (n1.norm() < 1e-8 || n2.norm() < 1e-8) continue;
+                        
+                        // Normalize vectors
+                        n1 = n1 / n1.norm();
+                        n2 = n2 / n2.norm();
+                        
+                        // Compute dot product and clamp to valid range
+                        double dot_product = n1 * n2;
+                        dot_product = std::max(-1.0, std::min(1.0, dot_product));
+                        
+                        // Calculate angle in degrees
+                        double angle = acos(dot_product) * 180.0 / MPI;
+                        
+                        // Add to total
+                        total_normal_variation += angle;
+                        valid_measurements++;
+                    }
+                }
+            }
+            
+            // Calculate average normal variation
+            double average_variation = (valid_measurements > 0) ? 
+                (total_normal_variation / valid_measurements) : 0.0;
+            
+            log("Sheet normal variation: " + std::to_string(average_variation) + 
+                " degrees (based on " + std::to_string(valid_measurements) + " measurements)");
+            
+            return average_variation; //度数，值越大表示面法线变化越剧烈，通常意味着区域曲率越高
+        }
+        catch (const std::exception& e) {
+            log("Exception occurred when computing normal variation: " + std::string(e.what()));
+            return 0.0;
+        }
+        catch (...) {
+            log("Unknown exception occurred when computing normal variation");
+            return 0.0;
+        }
+    }
+	template <typename M>
+    inline double sheet_operation<M>::get_sheet_dihedral_angle_deviation(std::vector<E *> sheet)
+    {
+        if (sheet.empty()) {
+            return 0.0;
+        }
+
+        try {
+            log("Computing sheet dihedral angle deviation...");
+            
+            double total_deviation = 0.0;
+            int valid_measurements = 0;
+
+            // For each edge in the sheet
+            for (auto e : sheet) {
+                if (!e) continue;
+                
+                double ideal_angle = 0.0;
+                double actual_angle = e->total_angle();
+                
+                // Skip edges with invalid angles
+                if (!std::isfinite(actual_angle) || actual_angle <= 0) continue;
+                
+                // Determine ideal angle based on edge properties
+                if (e->boundary()) {
+                    ideal_angle = e->sharp() ? e->total_angle() : 180.0; // Sharp edges have specific angles, regular boundary edges should be 180°
+                } else {
+                    ideal_angle = 360.0; // Internal edges should have 360° total angle
+                }
+                
+                // Calculate deviation as absolute difference between actual and ideal
+                double deviation = std::abs(actual_angle - ideal_angle);
+                
+                // For internal edges, take the minimum deviation considering periodicity around 360°
+                if (!e->boundary() && deviation > 180.0) {
+                    deviation = 360.0 - deviation;
+                }
+                
+                log("  Edge " + std::to_string(e->id()) + 
+                    " - actual angle: " + std::to_string(actual_angle) + 
+                    ", ideal angle: " + std::to_string(ideal_angle) + 
+                    ", deviation: " + std::to_string(deviation));
+                
+                total_deviation += deviation;
+                valid_measurements++;
+            }
+            
+            // Calculate average deviation
+            double average_deviation = (valid_measurements > 0) ? 
+                (total_deviation / valid_measurements) : 0.0;
+            
+            log("Sheet dihedral angle deviation: " + std::to_string(average_deviation) + 
+                " degrees (based on " + std::to_string(valid_measurements) + " measurements)");
+            
+            return average_deviation; //度数，值越大表示二面角偏离理想值越远，通常意味着网格畸变更严重
+        }
+        catch (const std::exception& e) {
+            log("Exception occurred when computing dihedral angle deviation: " + std::string(e.what()));
+            return 0.0;
+        }
+        catch (...) {
+            log("Unknown exception occurred when computing dihedral angle deviation");
+            return 0.0;
+        }
+    }
+	template <typename M>
+    inline std::pair<double, double> sheet_operation<M>::get_sheet_adjacent_hex_jacobian(std::vector<E *> sheet)
+    {
+        if (sheet.empty()) {
+            return {0.0, 0.0};
+        }
+
+        try {
+            log("Computing sheet adjacent hexahedra scaled Jacobian...");
+            
+            // 用于计算缩放雅可比行列式的辅助函数
+            auto calculate_scaled_jacobian = [](H* hex, M* mesh) -> double {
+                if (!hex || hex->vs.size() != 8) {
+                    return 0.0;
+                }
+                
+                // 获取八个顶点的坐标
+                std::vector<CPoint> vertex_positions;
+                for (int i = 0; i < 8; ++i) {
+                    V* v = mesh->idVertices(hex->vs[i]);
+                    if (!v) return 0.0;
+                    vertex_positions.push_back(v->position());
+                }
+                
+                // 计算8个角点的雅可比行列式
+                double min_jacobian = 1.0;
+                
+                // 计算每个角点的雅可比行列式并取最小值
+                for (int i = 0; i < 8; ++i) {
+                    // 获取从当前角点出发的三条边的向量
+                    CPoint v0, v1, v2;
+                    
+                    // 根据六面体角点索引确定相邻顶点
+                    // 这里使用简化模型，实际应根据六面体的顶点排列确定正确的边
+                    int neighbor_indices[3];
+                    switch(i) {
+                        case 0: neighbor_indices[0] = 1; neighbor_indices[1] = 3; neighbor_indices[2] = 4; break;
+                        case 1: neighbor_indices[0] = 0; neighbor_indices[1] = 2; neighbor_indices[2] = 5; break;
+                        case 2: neighbor_indices[0] = 1; neighbor_indices[1] = 3; neighbor_indices[2] = 6; break;
+                        case 3: neighbor_indices[0] = 0; neighbor_indices[1] = 2; neighbor_indices[2] = 7; break;
+                        case 4: neighbor_indices[0] = 0; neighbor_indices[1] = 5; neighbor_indices[2] = 7; break;
+                        case 5: neighbor_indices[0] = 1; neighbor_indices[1] = 4; neighbor_indices[2] = 6; break;
+                        case 6: neighbor_indices[0] = 2; neighbor_indices[1] = 5; neighbor_indices[2] = 7; break;
+                        case 7: neighbor_indices[0] = 3; neighbor_indices[1] = 4; neighbor_indices[2] = 6; break;
+                    }
+                    
+                    // 计算从当前角点到相邻顶点的向量
+                    v0 = vertex_positions[neighbor_indices[0]] - vertex_positions[i];
+                    v1 = vertex_positions[neighbor_indices[1]] - vertex_positions[i];
+                    v2 = vertex_positions[neighbor_indices[2]] - vertex_positions[i];
+                    
+                    // 计算雅可比行列式 J = (v0 × v1)·v2
+                    CPoint cross_product = v0 ^ v1;
+                    double jacobian_det = cross_product * v2;
+                    
+                    // 计算缩放雅可比行列式
+                    double len_v0 = v0.norm();
+                    double len_v1 = v1.norm();
+                    double len_v2 = v2.norm();
+                    
+                    if (len_v0 < 1e-10 || len_v1 < 1e-10 || len_v2 < 1e-10) {
+                        return 0.0; // 存在零长度边，可能是退化的六面体
+                    }
+                    
+                    double scaled_jacobian = jacobian_det / (len_v0 * len_v1 * len_v2);
+                    
+                    // 更新最小值
+                    min_jacobian = std::min(min_jacobian, scaled_jacobian);
+                }
+                
+                return min_jacobian;
+            };
+            
+            // 收集sheet中所有边的相邻六面体
+            std::set<int> adjacent_hex_ids;
+            for (auto e : sheet) {
+                if (!e) continue;
+                
+                for (int i = 0; i < e->neighbor_hs.size(); ++i) {
+                    adjacent_hex_ids.insert(e->neighbor_hs[i]);
+                }
+            }
+            
+            log("Found " + std::to_string(adjacent_hex_ids.size()) + " adjacent hexahedra to evaluate");
+            
+            // 计算所有相邻六面体的缩放雅可比行列式
+            std::vector<double> jacobian_values;
+            for (int hex_id : adjacent_hex_ids) {
+                H* hex = mesh->idHexs(hex_id);
+                if (!hex) continue;
+                
+                double scaled_jacobian = calculate_scaled_jacobian(hex, mesh);
+                if (scaled_jacobian != 0.0) { // 忽略无效值
+                    jacobian_values.push_back(scaled_jacobian);
+                }
+            }
+            
+            // 计算最小值和平均值
+            if (jacobian_values.empty()) {
+                log("No valid Jacobian values calculated");
+                return {0.0, 0.0};
+            }
+            
+            double min_jacobian = *std::min_element(jacobian_values.begin(), jacobian_values.end());
+            double avg_jacobian = 0.0;
+            for (double val : jacobian_values) {
+                avg_jacobian += val;
+            }
+            avg_jacobian /= jacobian_values.size();
+            
+            log("Sheet adjacent hexahedra - Minimum scaled Jacobian: " + std::to_string(min_jacobian) + 
+                ", Average scaled Jacobian: " + std::to_string(avg_jacobian) + 
+                " (based on " + std::to_string(jacobian_values.size()) + " hexahedra)");
+            
+            return {min_jacobian, avg_jacobian};
+        }
+        catch (const std::exception& e) {
+            log("Exception occurred when computing scaled Jacobian: " + std::string(e.what()));
+            return {0.0, 0.0};
+        }
+        catch (...) {
+            log("Unknown exception occurred when computing scaled Jacobian");
+            return {0.0, 0.0};
+        }
+    }
 }
