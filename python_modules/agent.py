@@ -25,22 +25,26 @@ class Agent:
         self.episode = episode
         self.memory = ReplayMemory(self.capacity)
         
+        # 检测CUDA设备
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Using device: {self.device}")
+        
         # 是否使用几何特征
         self.use_geometric_features = use_geometric_features
         
         # 使用HexMeshQNet替代之前的U_linear_QNet
         if use_geometric_features:
             # 策略网络(主动更新)
-            self.policy_net = network.HexMeshQNet(node_feat_dim=10, hidden_dim=64, num_gnn_layers=3)
+            self.policy_net = network.HexMeshQNet(node_feat_dim=10, hidden_dim=64, num_gnn_layers=3).to(self.device)
             # 目标网络(延迟更新)
-            self.target_net = network.HexMeshQNet(node_feat_dim=10, hidden_dim=64, num_gnn_layers=3)
+            self.target_net = network.HexMeshQNet(node_feat_dim=10, hidden_dim=64, num_gnn_layers=3).to(self.device)
             # 将策略网络参数复制到目标网络
             self.target_net.load_state_dict(self.policy_net.state_dict())
             self.target_net.eval()  # 设置为评估模式
             self.model = self.policy_net  # 兼容性
         else:
-            self.policy_net = network.U_linear_QNet(2, 1, 10, 10, 10)
-            self.target_net = network.U_linear_QNet(2, 1, 10, 10, 10)
+            self.policy_net = network.U_linear_QNet(2, 1, 10, 10, 10).to(self.device)
+            self.target_net = network.U_linear_QNet(2, 1, 10, 10, 10).to(self.device)
             self.target_net.load_state_dict(self.policy_net.state_dict())
             self.target_net.eval()
             self.model = self.policy_net  # 兼容性
@@ -162,12 +166,17 @@ class Agent:
         self.total_episodes = max(self.total_episodes, episode + 1)
         
         sample = random.random()
-        eps_threshold = 0.6 / (episode + 1)
+        # 调整探索率计算：使用指数衰减，并设置最小探索率
+        min_epsilon = 0.05  # 最小探索率
+        decay_rate = 0.995 # 衰减因子，越接近1衰减越慢
+        start_epsilon = 0.9 # 初始探索率
+        eps_threshold = max(min_epsilon, start_epsilon * (decay_rate ** episode))
+        print(f"Episode: {episode}, Epsilon: {eps_threshold:.4f}") # 打印当前的探索率
         
         if sample < eps_threshold:
             # 随机选择
             action = random.randint(0, len(state) - 1)
-            print(f"random action: {action} corresponding sheet id: {state[action][0]} sheet energy: {state[action][1]}")
+            print(f"random action (epsilon={eps_threshold:.4f}): {action} corresponding sheet id: {state[action][0]} sheet energy: {state[action][1]}")
 
             # 根据自适应过滤阈值决定是否过滤非法动作
             if self.should_filter_error(episode):
@@ -189,13 +198,14 @@ class Agent:
             return action
         else:
             # 贪婪选择
+            print(f"greedy action (epsilon={eps_threshold:.4f})") # 添加日志区分贪婪选择
             with torch.no_grad():
                 if self.use_geometric_features:
                     # 使用HexMeshQNet
                     features, _ = self.extract_features(state)
                     # 创建模拟的图结构数据（简化版，实际应用中需要真实的图数据）
                     num_nodes = len(state)
-                    x = torch.tensor(features, dtype=torch.float32)  # 节点特征
+                    x = torch.tensor(features, dtype=torch.float32).to(self.device)  # 节点特征
                     
                     # 创建一个简单的全连接图
                     edge_index = []
@@ -203,19 +213,19 @@ class Agent:
                         for j in range(num_nodes):
                             if i != j:
                                 edge_index.append([i, j])
-                    edge_index = torch.tensor(edge_index, dtype=torch.long).t()
+                    edge_index = torch.tensor(edge_index, dtype=torch.long).t().to(self.device)
                     
                     # 单图批处理
-                    batch = torch.zeros(num_nodes, dtype=torch.long)
+                    batch = torch.zeros(num_nodes, dtype=torch.long).to(self.device)
                     
                     # 为每个sheet创建节点索引
-                    sheet_node_idx = [torch.tensor([i]) for i in range(num_nodes)]
+                    sheet_node_idx = [torch.tensor([i]).to(self.device) for i in range(num_nodes)]
                     
                     # 预测Q值
                     scores = self.model(x, edge_index, batch, sheet_node_idx, x)
                 else:
                     # 使用原有的U_linear_QNet
-                    state_tensor = torch.tensor(state, dtype=torch.float32)  # shape: (n, 2)
+                    state_tensor = torch.tensor(state, dtype=torch.float32).to(self.device)  # shape: (n, 2)
                     scores = self.model(state_tensor)  # shape: (n, 1)
                 
                 # 获取Q值
@@ -239,7 +249,7 @@ class Agent:
                     # 不过滤，直接选择Q值最高的动作
                     action = np.argmax(q_values)
                 
-                print(f"greedy action: {action} corresponding sheet id: {state[action][0]} sheet energy: {state[action][1]}")
+                print(f"greedy action chosen: {action} corresponding sheet id: {state[action][0]} sheet energy: {state[action][1]}")
                 return action
 
     def get_action(self, state): # 推理使用
@@ -250,7 +260,7 @@ class Agent:
                 features, _ = self.extract_features(state)
                 # 创建模拟的图结构数据
                 num_nodes = len(state)
-                x = torch.tensor(features, dtype=torch.float32)
+                x = torch.tensor(features, dtype=torch.float32).to(self.device)
                 
                 # 创建一个简单的全连接图
                 edge_index = []
@@ -258,19 +268,19 @@ class Agent:
                     for j in range(num_nodes):
                         if i != j:
                             edge_index.append([i, j])
-                edge_index = torch.tensor(edge_index, dtype=torch.long).t()
+                edge_index = torch.tensor(edge_index, dtype=torch.long).t().to(self.device)
                 
                 # 单图批处理
-                batch = torch.zeros(num_nodes, dtype=torch.long)
+                batch = torch.zeros(num_nodes, dtype=torch.long).to(self.device)
                 
                 # 为每个sheet创建节点索引
-                sheet_node_idx = [torch.tensor([i]) for i in range(num_nodes)]
+                sheet_node_idx = [torch.tensor([i]).to(self.device) for i in range(num_nodes)]
                 
                 # 预测Q值
                 scores = self.model(x, edge_index, batch, sheet_node_idx, x)
             else:
                 # 使用原有的U_linear_QNet
-                state_tensor = torch.tensor(state, dtype=torch.float32)
+                state_tensor = torch.tensor(state, dtype=torch.float32).to(self.device)
                 scores = self.model(state_tensor)
             
             # 获取Q值并创建掩码，排除energy <= 0的非法动作
@@ -301,7 +311,7 @@ class Agent:
         # 如果没有返回权重，则创建默认权重
         if weights is None:
             weights = np.ones(self.batch_size)
-        weights = torch.tensor(weights, dtype=torch.float32)
+        weights = torch.tensor(weights, dtype=torch.float32).to(self.device)
         
         if self.use_geometric_features:
             # 处理几何特征的版本
@@ -326,26 +336,26 @@ class Agent:
                 num_nodes_next = len(next_state)
                 
                 # 当前状态的图结构
-                state_x = torch.tensor(state_features, dtype=torch.float32)
+                state_x = torch.tensor(state_features, dtype=torch.float32).to(self.device)
                 state_edge_index = []
                 for s in range(num_nodes_state):
                     for t in range(num_nodes_state):
                         if s != t:
                             state_edge_index.append([s, t])
-                state_edge_index = torch.tensor(state_edge_index, dtype=torch.long).t()
-                state_batch = torch.zeros(num_nodes_state, dtype=torch.long)
-                state_sheet_node_idx = [torch.tensor([j]) for j in range(num_nodes_state)]
+                state_edge_index = torch.tensor(state_edge_index, dtype=torch.long).t().to(self.device)
+                state_batch = torch.zeros(num_nodes_state, dtype=torch.long).to(self.device)
+                state_sheet_node_idx = [torch.tensor([j]).to(self.device) for j in range(num_nodes_state)]
                 
                 # 下一状态的图结构
-                next_state_x = torch.tensor(next_state_features, dtype=torch.float32)
+                next_state_x = torch.tensor(next_state_features, dtype=torch.float32).to(self.device)
                 next_state_edge_index = []
                 for s in range(num_nodes_next):
                     for t in range(num_nodes_next):
                         if s != t:
                             next_state_edge_index.append([s, t])
-                next_state_edge_index = torch.tensor(next_state_edge_index, dtype=torch.long).t()
-                next_state_batch = torch.zeros(num_nodes_next, dtype=torch.long)
-                next_state_sheet_node_idx = [torch.tensor([j]) for j in range(num_nodes_next)]
+                next_state_edge_index = torch.tensor(next_state_edge_index, dtype=torch.long).t().to(self.device)
+                next_state_batch = torch.zeros(num_nodes_next, dtype=torch.long).to(self.device)
+                next_state_sheet_node_idx = [torch.tensor([j]).to(self.device) for j in range(num_nodes_next)]
                 
                 # 使用策略网络计算当前状态的Q值
                 state_q_values = self.policy_net(state_x, state_edge_index, state_batch, 
@@ -367,10 +377,10 @@ class Agent:
                         # 然后使用目标网络计算该动作的Q值
                         next_q_value = next_state_q_values[best_action]
                     else:
-                        next_q_value = torch.tensor(0.0)
+                        next_q_value = torch.tensor(0.0).to(self.device)
                 
                 # 计算期望Q值，使用截断的n步Q值以提高稳定性
-                expected_q_value = torch.tensor(reward) + self.gamma * next_q_value
+                expected_q_value = torch.tensor(reward).to(self.device) + self.gamma * next_q_value
                 
                 # 计算TD误差
                 td_error = abs((expected_q_value - current_q_value).item())
@@ -414,13 +424,13 @@ class Agent:
                     print(f"当前错误过滤阈值: {self.error_filter_threshold:.2f}, 总训练回合数: {self.total_episodes}")
         else:
             # 原始版本，无几何特征，也更新为使用目标网络和优先级采样的版本
-            state_batch = torch.tensor([item for item in batch[0]], dtype=torch.float32)
-            action_batch = torch.tensor([item for item in batch[1]], dtype=torch.long)
-            next_state_batch = torch.tensor([item for item in batch[2]], dtype=torch.float32)
-            reward_batch = torch.tensor([item for item in batch[3]], dtype=torch.float32)
+            state_batch = torch.tensor([item for item in batch[0]], dtype=torch.float32).to(self.device)
+            action_batch = torch.tensor([item for item in batch[1]], dtype=torch.long).to(self.device)
+            next_state_batch = torch.tensor([item for item in batch[2]], dtype=torch.float32).to(self.device)
+            reward_batch = torch.tensor([item for item in batch[3]], dtype=torch.float32).to(self.device)
             
             # 检查是否有错误标志
-            error_flags = torch.tensor([len(batch) > 4 and item for item in batch[4]], dtype=torch.bool) if len(batch) > 4 else None
+            error_flags = torch.tensor([len(batch) > 4 and item for item in batch[4]], dtype=torch.bool).to(self.device) if len(batch) > 4 else None
             
             self.optimizer.zero_grad()
             
@@ -440,7 +450,7 @@ class Agent:
             expected_q_value = reward_batch + self.gamma * next_q_value
             
             # 计算TD误差（用于更新优先级）
-            td_errors = abs(expected_q_value.detach() - q_value.detach()).numpy()
+            td_errors = abs(expected_q_value.detach() - q_value.detach()).cpu().numpy()
             
             # 计算损失时应用重要性采样权重
             loss = (F.smooth_l1_loss(q_value, expected_q_value, reduction='none') * weights).mean()

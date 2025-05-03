@@ -15,6 +15,7 @@
 #include <fstream>
 #include <vector>
 #include <sstream>
+#include <filesystem> // 添加 filesystem 头文件
 
 #define PYBIND11_DETAILED_ERROR_MESSAGES
 #include <pybind11/embed.h>
@@ -36,12 +37,12 @@ inline std::string GetBuildMode() {
 
 // 用法说明函数
 void print_usage() {
-    std::cout << "用法: RL_Mesh_demo <mesh_file_path> [--load-model] [--model-path=path] [--memory-path=path]" << std::endl;
+    std::cout << "用法: RL_Mesh_demo <mesh_directory_path> [--load-model] [--model-path=path] [--memory-path=path]" << std::endl;
     std::cout << "参数:" << std::endl;
-    std::cout << "  <mesh_file_path>     要处理的网格文件路径" << std::endl;
-    std::cout << "  --load-model         加载之前保存的模型和记忆(可选，默认不加载)" << std::endl;
-    std::cout << "  --model-path=path    指定模型文件路径(可选，默认: python_modules/models/model.pt)" << std::endl;
-    std::cout << "  --memory-path=path   指定记忆文件路径(可选，默认: python_modules/models/memory.pkl)" << std::endl;
+    std::cout << "  <mesh_directory_path> 包含 .Qhex 文件的文件夹路径" << std::endl;
+    std::cout << "  --load-model          加载之前保存的模型和记忆(可选，默认不加载)" << std::endl;
+    std::cout << "  --model-path=path     指定模型文件路径(可选，默认: python_modules/models/model.pt)" << std::endl;
+    std::cout << "  --memory-path=path    指定记忆文件路径(可选，默认: python_modules/models/memory.pkl)" << std::endl;
 }
 
 int main(int argc, char* argv[])
@@ -158,8 +159,14 @@ int main(int argc, char* argv[])
             print_usage();
             return -1;
         }
-        
-        std::string mesh_name(argv[1]);
+
+        std::filesystem::path mesh_directory_path(argv[1]); // 获取文件夹路径
+        if (!std::filesystem::is_directory(mesh_directory_path)) {
+            std::cerr << "错误: 提供的路径不是一个有效的文件夹: " << argv[1] << std::endl;
+            print_usage();
+            return -1;
+        }
+
         bool load_model = false;
         std::string model_path = "python_modules/models/model.pt";
         std::string memory_path = "python_modules/models/memory.pkl";
@@ -194,41 +201,50 @@ int main(int argc, char* argv[])
                 std::cout << "Warning: failed to load, trying to train " << std::endl;
             }
         }
-        
-        {
-            std::ifstream fin(mesh_name);
-            if (!fin.good()){
-                std::cerr << "File not found or cannot be opened: " << mesh_name << std::endl;
-                return -1;
-            }
-        }
-        int pos = mesh_name.rfind("/", mesh_name.length());
-        path = mesh_name.substr(0, pos+1);
 
-        for(int episode = 0; episode < 1; episode++){
-            std::cout << "Episode: " << episode << std::endl;
-        
+        // 遍历文件夹中的文件
+        for (const auto& entry : std::filesystem::directory_iterator(mesh_directory_path)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".Qhex") {
+                std::string mesh_name = entry.path().string(); // 获取当前处理的文件完整路径
+                std::cout << "\n=====================================================" << std::endl;
+                std::cout << "Start to process mesh: " << mesh_name << std::endl;
+                std::cout << "=====================================================" << std::endl;
+
+                // 检查文件是否存在且可读 (虽然directory_iterator通常能保证，但多一层检查更安全)
+                {
+                    std::ifstream fin(mesh_name);
+                    if (!fin.good()){
+                        std::cerr << "错误: 文件无法找到或打开: " << mesh_name << std::endl;
+                        continue; // 跳过这个文件，处理下一个
+                    }
+                }
+                // 更新全局路径变量 (如果其他地方需要)
+                // int pos = mesh_name.rfind("/", mesh_name.length());
+                // if (pos != std::string::npos) {
+                //     path = mesh_name.substr(0, pos + 1);
+                // } else {
+                //     path = "./"; // 或者其他默认值
+                // }
+
+
+        for(int episode = 0; episode < 50; episode++){
+            std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl;
+
         /*---------- log setting ----------*/
             TMesh tmesh;
             sheet_operation<TMesh> sheet_op(&tmesh);
             get_singularity_number<TMesh> get_singularity_num_op(&tmesh);
-            if (strutil::endsWith(mesh_name, ".Qhex"))
-            {
-                std::cout << "Loading mesh file: " << mesh_name << std::endl;
-                tmesh.load_Qhex(mesh_name.c_str());
-                //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
-                
-                // 使用正确的方法访问网格数据
-                std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
-                std::cout << "Edge count: " << tmesh.es.size() << std::endl;
-                std::cout << "Face count: " << tmesh.fs.size() << std::endl;
-                std::cout << "Cell count: " << tmesh.hs.size() << std::endl;
-            }
-            else
-            {
-                std::cout << "Invalid input file format: " << mesh_name << std::endl;
-                return -1;
-            }
+
+            // 加载 .Qhex 文件
+            std::cout << "Loading mesh file: " << mesh_name << std::endl;
+            tmesh.load_Qhex(mesh_name.c_str());
+            //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
+
+            // 使用正确的方法访问网格数据
+            std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
+            std::cout << "Edge count: " << tmesh.es.size() << std::endl;
+            std::cout << "Face count: " << tmesh.fs.size() << std::endl;
+            std::cout << "Cell count: " << tmesh.hs.size() << std::endl;
             std::cout << "Mesh file successfully loaded" << std::endl;
 
             // Redirect stdout and stderr to main log
@@ -239,7 +255,7 @@ int main(int argc, char* argv[])
             std::cout << "Log started at " << timestamp << std::endl;
             std::cout << "Session ID: " << session_id << std::endl;
             std::cout << "Build Mode: " << build_mode << std::endl;
-            std::cout << "================== Main Program Log ==================" << std::endl;
+            std::cout << "================== Main Program Log for " << mesh_name << " ==================" << std::endl; // 添加文件名到日志
 
             int current_singularity_num = 0;
             float total_reward = 0.0;
@@ -269,85 +285,109 @@ int main(int argc, char* argv[])
             get_singularity_num_op.generate_singularity_number(&tmesh);
             current_singularity_num = get_singularity_num_op.singualarity_id;
 
-            std::cout << "Episode: " << episode << std::endl;
-            std::cout << "Current singularity number: " << current_singularity_num << std::endl;
+                std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl; // 明确指出是哪个文件的episode
+                std::cout << "Current singularity number: " << current_singularity_num << std::endl;
 
-            if (state.size() == 0) {
-                std::cout << "ERROR: State is empty, cannot continue with reinforcement learning algorithm" << std::endl;
-                debug_log << "State is empty after calculation, aborting episode" << std::endl;
-                continue; // Skip this episode and try next one
-            }
-            
-            while(agent.attr("is_finish")(state_to_list(state)).cast<bool>()){
-                State state_snapshot = state;  // Take a snapshot of the state
-                int action = agent.attr("choose_action")(state_to_list(state_snapshot), episode).cast<int>();
-                std::cout << "Action: " << action << std::endl;
-                
-                debug_log << "State size before action: " << state.size() << std::endl;
-                int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op);
-                debug_log << "State size after action: " << state.size() << std::endl;
-                std::cout << "Action result: " << done << std::endl;
-
-                if(done==0){
-                    std::cout << "Critical error: sheet energy <= 0. Ending episode with penalty." << std::endl;
-                    total_reward += -100000.0f; // Large negative reward
-                    log(episode, state_snapshot, action, state, total_reward); // Use snapshot
-                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
-                    break; // End current training episode immediately
+                // 检查状态是否有效：如果所有边的能量都小于等于0，则跳过此 episode
+                bool all_energy_non_positive = true; // Assume true initially
+                if (state.size() > 0) { // 确保状态不为空
+                    // 使用索引循环访问 sheet_energy
+                    for (size_t i = 0; i < state.size(); ++i) {
+                        // Access energy using the correct member vector
+                        if (state.sheet_energy[i] > 0) { // Check if any energy is positive
+                            all_energy_non_positive = false; // Found a positive energy, so not all are non-positive
+                            break; // No need to check further
+                        }
+                    }
+                } else {
+                    // 如果状态本身为空，也视为无效状态 (或者说，没有正能量边)
+                    all_energy_non_positive = true;
                 }
-                else if(done==1){
-                    std::cout << "Optimization finished. Ending episode." << std::endl;
+
+                // If all energies are non-positive (<= 0), skip this episode
+                if (all_energy_non_positive) {
+                    std::cout << "INFO: All edge energies are non-positive or state is empty. No further optimization possible for this episode for file " << mesh_name << std::endl;
+                    debug_log << "All edge energies are non-positive or state is empty after calculation for file " << mesh_name << ", aborting episode" << std::endl;
+                    break; // Skip this file and try next
+                }
+
+                while(agent.attr("is_finish")(state_to_list(state)).cast<bool>()){
+                    State state_snapshot = state;  // Take a snapshot of the state
+                    int action = agent.attr("choose_action")(state_to_list(state_snapshot), episode).cast<int>();
+                    std::cout << "Action: " << action << std::endl;
+                    
+                    debug_log << "State size before action: " << state.size() << std::endl;
+                    int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op);
+                    debug_log << "State size after action: " << state.size() << std::endl;
+                    std::cout << "Action result: " << done << std::endl;
+
+                    if(done==0){
+                        std::cout << "Critical error: sheet energy <= 0. Ending episode with penalty." << std::endl;
+                        total_reward += -100000.0f; // Large negative reward
+                        log(episode, state_snapshot, action, state, total_reward); // Use snapshot
+                        agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
+                        break; // End current training episode immediately
+                    }
+                    else if(done==1){
+                        std::cout << "Optimization finished. Ending episode." << std::endl;
+                        total_reward += calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
+                        std::cout << "Total reward: " << total_reward << std::endl;
+                        log(episode, state_snapshot, action, state, total_reward);  
+                        agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
+                        break; // End current training episode immediately
+                    }
+                    else if(done==2){
+                        std::cout << "Optimization not finished. Continuing." << std::endl;
+                    }
                     total_reward += calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
                     std::cout << "Total reward: " << total_reward << std::endl;
-                    log(episode, state_snapshot, action, state, total_reward);  
+                    log(episode, state_snapshot, action, state, total_reward);
+                    std::cout << "Log completed" << std::endl;
                     agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
-                    break; // End current training episode immediately
+                    std::cout << "Memory update completed" << std::endl;
+
                 }
-                else if(done==2){
-                    std::cout << "Optimization not finished. Continuing." << std::endl;
+                
+                if (state.size() > 0) {
+                    std::cout << "Training normally ended, saving model" << std::endl;
+                    agent.attr("replay")();
+                    
+                    // 确保目录存在
+                    system("mkdir \"python_modules\\models\" 2>NUL");
+                    
+                    // 使用save_checkpoint函数同时保存模型和记忆
+                    std::cout << "Saving model and replay memory..." << std::endl;
+                    agent.attr("save_checkpoint")(model_path, memory_path);
+                    std::cout << "Model and replay memory saved successfully" << std::endl;
+                } else {
+                    std::cout << "Training abnormally ended, state is empty" << std::endl;
                 }
-                total_reward += calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
-                std::cout << "Total reward: " << total_reward << std::endl;
-                log(episode, state_snapshot, action, state, total_reward);
-                std::cout << "Log completed" << std::endl;
-                agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
-                std::cout << "Memory update completed" << std::endl;
 
-            }
-            
-            if (state.size() > 0) {
-                std::cout << "Training normally ended, saving model" << std::endl;
-                agent.attr("replay")();
-                
-                // 确保目录存在
-                system("mkdir \"python_modules\\models\" 2>NUL");
-                
-                // 使用save_checkpoint函数同时保存模型和记忆
-                std::cout << "Saving model and replay memory..." << std::endl;
-                agent.attr("save_checkpoint")(model_path, memory_path);
-                std::cout << "Model and replay memory saved successfully" << std::endl;
-            } else {
-                std::cout << "Training abnormally ended, state is empty" << std::endl;
-            }
+                // save to data\results
+                std::string result_dir = "F://RL_HMesh//data//results//";
+                system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
 
-        // save to data\results
-        std::string result_dir = "F://RL_HMesh//data//results//";
-        system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
-        
-        // 从mesh_name提取文件名部分
-        std::string base_filename = mesh_name.substr(mesh_name.find_last_of("/\\") + 1);
-        base_filename = base_filename.substr(0, base_filename.find_last_of("."));
-        
-        std::string result_file = result_dir + base_filename + "_" + std::to_string(episode) + ".Qhex";
-        std::cout << "Saving collapsed  mesh to: " << result_file << std::endl;
-        tmesh.write_Qhex(result_file.c_str());
-        // Restore cout and cerr at the end of training
-        std::cout.rdbuf(cout_buf);
-        std::cerr.rdbuf(cerr_buf);
-        }
+            // 从mesh_name提取文件名部分 (不含扩展名)
+            std::string base_filename = entry.path().stem().string();
 
-        std::cout << "Training completed. Logs saved to " << log_dir << std::endl;
-        return 0;
+            std::string result_file = result_dir + base_filename + "_processed_" + std::to_string(episode) + ".Qhex";
+            std::cout << "Saving collapsed mesh to: " << result_file << std::endl;
+            tmesh.write_Qhex(result_file.c_str());
+                // Restore cout and cerr at the end of training for this file
+                std::cout.rdbuf(cout_buf);
+                std::cerr.rdbuf(cerr_buf);
+            } // end episode loop for one file
+
+            std::cout << "文件处理完成: " << mesh_name << std::endl;
+
+            } // end if .Qhex file
+        } // end directory iteration loop
+
+        std::cout << "所有 .Qhex 文件处理完成。日志保存在 " << log_dir << std::endl;
+        // Restore original cout/cerr buffers if they were redirected outside the loop (though in this code they are redirected inside)
+        // std::cout.rdbuf(original_cout_buf); // Need to save original buffers at the start if needed
+        // std::cerr.rdbuf(original_cerr_buf);
+        return 0; // Ensure return 0 is outside the main loop
     }
     catch(py::error_already_set &e) {
         std::cerr << "Pybind11 error: " << e.what() << std::endl;

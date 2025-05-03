@@ -88,9 +88,16 @@ namespace HMeshLib
 			//m_sheet_inflate = false;
 			//m_newv = 0;
 			m_sheet = 0;
-			m_degree = 0;
-			m_mark = false;
-			//m_not_output = false;
+			m_degree = 0; // 在 state_functions.h 中可能间接使用 (虽然未直接看到)
+			m_mark = 0; // 用作临时标记 (sheet_op, tools)
+			m_saved = 0; // 用作临时标记 (singularity_number)
+			// 以下成员变量在当前分析的代码中未使用，暂不初始化，添加注释标记
+			// bool m_sheet_inflate; // 未使用
+			// int m_newv; // 未使用
+			// bool m_not_output; // 未使用
+			// CPoint m_u; // 未使用
+			// CPoint m_L; // 未使用
+			// CPoint m_pre_position; // 未使用
 		};
 		~TV() {};
 
@@ -185,6 +192,19 @@ namespace HMeshLib
 			m_sharp = 0;
 			m_stc = 0;
 			m_sheet=0;
+
+			m_ave_angle = -999.0; 
+			m_total_angle = -999.0; 
+			m_mark = 0; // 用作临时标记 (sheet_op, tools)
+			m_sim_energy = 0.0; // 在 sheet_operation 中计算和读取
+			m_ideal_degree = 0; // 在 sheet_operation 中计算和读取
+			m_newv = nullptr; // 在 sheet_operation 中设置和读取
+			// m_saved = false; // 已在前面初始化
+			// 以下成员变量在当前分析的代码中未使用，暂不初始化，添加注释标记
+			// bool m_outside; // 未使用
+			// double m_weight; // 未使用
+			// int m_new_e; // 未使用
+			// bool m_sheet_inflate; // 未使用
 		};
 		~TE() {};
 
@@ -276,6 +296,11 @@ namespace HMeshLib
 			m_boundary_id = 0;
 			m_traced = false;
 			m_delete = false;
+
+			m_inverse = false;
+			m_mark = 0;
+			m_sheet_inflate = false;
+			m_newv = nullptr;
 		};
 		~TF() {};
 		bool& inverse() { return m_inverse; };
@@ -329,6 +354,10 @@ namespace HMeshLib
 			m_this_sheet = false;
 			m_stc = 0;
 			m_delete = false;
+
+			m_mark = 0;
+			m_this_sheet = 0;
+			m_outside = false;
 		};
 		~TH() {};
 

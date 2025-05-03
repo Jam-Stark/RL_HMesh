@@ -12,7 +12,7 @@ namespace HMeshLib
 {
     // 新增日志捕捉代码，自动写入 F:/RL_HMesh/logs/<build_mode>/<session_id>/sheet_operation.log
     inline std::ofstream& getSheetLog() {
-        static std::ofstream ofs;
+        static std::ofstream ofs; // 将 ofstream 声明为 static
         if (!ofs.is_open()) {
             const char* session_env = std::getenv("RL_HMESH_SESSION_ID");
             const char* build_mode_env = std::getenv("RL_HMESH_BUILD_MODE");
@@ -131,33 +131,42 @@ namespace HMeshLib
 	{
 		std::vector<E*> sheet;
 		std::queue<E*> eQueue;
+		std::unordered_set<int> visited_edge_ids; // 使用局部的 set 跟踪访问过的边 ID
+
+		if (!e) return sheet; // 处理空指针输入
+
 		eQueue.push(e);
-		e->mark() = true;
+		visited_edge_ids.insert(e->id());
+
 		while (!eQueue.empty())
 		{
 			E* be = eQueue.front();
 			sheet.push_back(be);
 			eQueue.pop();
+
+			if (!be) continue; // 安全检查
+
 			for (int ehIndex = 0; ehIndex < be->neighbor_hs.size(); ehIndex++)
 			{
 				H* h = mesh->idHexs(be->neighbor_hs[ehIndex]);
+				if (!h) continue; // 安全检查
+
 				std::vector<E*> parallel_es = mesh->e_parallel_e_in_hex(h, be);
 				for (int peIndex = 0; peIndex < parallel_es.size(); peIndex++)
 				{
 					E* pe = parallel_es[peIndex];
-					if (pe->mark() == false)
+					if (!pe) continue; // 安全检查
+
+					// 检查是否已在当前搜索中访问过
+					if (visited_edge_ids.find(pe->id()) == visited_edge_ids.end())
 					{
 						eQueue.push(pe);
-						pe->mark() = true;
+						visited_edge_ids.insert(pe->id());
 					}
 				}
 			}
 		}
-		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
-		{
-			E* e = sheet[eIndex];
-			e->mark() = false;
-		}
+		// 不需要重置 mark()，因为它没有被修改
 		return sheet;
 	}
 
@@ -324,136 +333,136 @@ namespace HMeshLib
 	{
 		try {
 			log("Starting to mark element attributes, processing faces count: " + std::to_string(fs.size()));
-			
+	
 			// 检查输入参数
 			if (fs.empty()) {
-				log("Warning: Input face list is empty");
+				// log("Warning: Input face list is empty");
 				return;
 			}
-			
+	
 			// 第一次遍历：标记边界并修正法线
 			for (int fIndex = 0; fIndex < fs.size(); fIndex++)
 			{
 				try {
 					F* f = fs[fIndex];
-					
+	
 					// 检查面是否有效
 					if (f == nullptr) {
-						log("Error: Detected null face pointer, index: " + std::to_string(fIndex));
+						// log("Error: Detected null face pointer, index: " + std::to_string(fIndex));
 						continue;
 					}
-					
-					log("Processing face ID: " + std::to_string(f->id()));
-					
+	
+					// log("Processing face ID: " + std::to_string(f->id()));
+	
 					// if (f->id() == 465) {
 					// 	log("Special debug for face 465:");
 					// 	log("  neighbor_hs count: " + std::to_string(f->neighbor_hs.size()));
 					// 	log("  vertices count: " + std::to_string(f->vs.size()));
 					// 	log("  edges count: " + std::to_string(f->es.size()));
 					// }
-					
+	
 					// 检查邻接六面体列表是否有效
 					if (f->neighbor_hs.empty()) {
-						log("Warning: Face " + std::to_string(f->id()) + " has no adjacent hexahedra");
+						// log("Warning: Face " + std::to_string(f->id()) + " has no adjacent hexahedra");
 					}
-					
+	
 					//mark boundary
 					if (f->neighbor_hs.size() == 1)
 					{
 						f->boundary() = true;
-						log("Face " + std::to_string(f->id()) + " marked as boundary face");
+						// log("Face " + std::to_string(f->id()) + " marked as boundary face");
 					}
 					else
 					{
 						f->boundary() = false;
 					}
-
+	
 					// 修正六面体面法线
 					for (int fhIndex = 0; fhIndex < f->neighbor_hs.size(); fhIndex++)
 					{
 						try {
 							// 检查六面体ID是否有效
 							if (f->neighbor_hs[fhIndex] < 0 || f->neighbor_hs[fhIndex] >= mesh->maxHid()) {
-								log("Error: Face " + std::to_string(f->id()) + " has invalid adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]) + " with max Hid: "+ std::to_string(mesh->maxHid()));
+								// log("Error: Face " + std::to_string(f->id()) + " has invalid adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]) + " with max Hid: "+ std::to_string(mesh->maxHid()));
 								continue;
 							}
-							
-							log("About to get hexahedron with ID: " + std::to_string(f->neighbor_hs[fhIndex]));
+	
+							// log("About to get hexahedron with ID: " + std::to_string(f->neighbor_hs[fhIndex]));
 							H* h = mesh->idHexs(f->neighbor_hs[fhIndex]);
-							log("Successfully got hexahedron with ID: " + std::to_string(h->id()));
-							
+							// log("Successfully got hexahedron with ID: " + std::to_string(h->id()));
+	
 							// 检查六面体是否存在
 							if (h == nullptr) {
-								log("Error: Unable to get adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]) + " for face " + std::to_string(f->id()));
+								// log("Error: Unable to get adjacent hexahedron ID: " + std::to_string(f->neighbor_hs[fhIndex]) + " for face " + std::to_string(f->id()));
 								continue;
 							}
-							
+	
 							try {
 								mesh->revise_hex_face_normal(h);
 							}
 							catch (const std::exception& e) {
-								log("Error while correcting hexahedron face normal, hex ID: " + std::to_string(h->id()) + ", exception: " + std::string(e.what()));
+								// log("Error while correcting hexahedron face normal, hex ID: " + std::to_string(h->id()) + ", exception: " + std::string(e.what()));
 							}
 							catch (...) {
-								log("Unknown error while correcting hexahedron face normal, hex ID: " + std::to_string(h->id()));
+								// log("Unknown error while correcting hexahedron face normal, hex ID: " + std::to_string(h->id()));
 							}
 						}
 						catch (const std::exception& e) {
-							log("Exception in hexahedron processing: " + std::string(e.what()) + ", face ID: " + std::to_string(f->id()) + ", hex index: " + std::to_string(fhIndex));
+							// log("Exception in hexahedron processing: " + std::string(e.what()) + ", face ID: " + std::to_string(f->id()) + ", hex index: " + std::to_string(fhIndex));
 						}
 						catch (...) {
-							log("Unknown exception in hexahedron processing, face ID: " + std::to_string(f->id()) + ", hex index: " + std::to_string(fhIndex));
+							// log("Unknown exception in hexahedron processing, face ID: " + std::to_string(f->id()) + ", hex index: " + std::to_string(fhIndex));
 						}
 					}
 				}
 				catch (const std::exception& e) {
-					log("Exception in first traversal at face index " + std::to_string(fIndex) + ": " + std::string(e.what()));
+					// log("Exception in first traversal at face index " + std::to_string(fIndex) + ": " + std::string(e.what()));
 				}
 				catch (...) {
-					log("Unknown exception in first traversal at face index " + std::to_string(fIndex));
+					// log("Unknown exception in first traversal at face index " + std::to_string(fIndex));
 				}
 			}
-
-			log("First traversal completed, now marking vertices and edges");
-			
+	
+			// log("First traversal completed, now marking vertices and edges");
+	
 			// 第二次遍历：标记顶点和边
 			for (int fIndex = 0; fIndex < fs.size(); fIndex++)
 			{
 				try {
 					F* f = fs[fIndex];
-					
+	
 					// 检查面是否有效
 					if (f == nullptr) {
-						log("Skipping null face, index: " + std::to_string(fIndex));
+						// log("Skipping null face, index: " + std::to_string(fIndex));
 						continue;
 					}
-					
-					log("Processing face for vertices/edges ID: " + std::to_string(f->id()));
-					
+	
+					// log("Processing face for vertices/edges ID: " + std::to_string(f->id()));
+	
 					// 标记面顶点
 					try {
-						log("Marking " + std::to_string(f->vs.size()) + " vertices for face " + std::to_string(f->id()));
+						// log("Marking " + std::to_string(f->vs.size()) + " vertices for face " + std::to_string(f->id()));
 						for (int fvIndex = 0; fvIndex < f->vs.size(); fvIndex++)
 						{
 							try {
 								// 检查顶点ID是否有效
 								if (f->vs[fvIndex] < 0 || f->vs[fvIndex] >= mesh->maxVid()) {
-									log("Error: Face " + std::to_string(f->id()) + " has invalid vertex ID: " + std::to_string(f->vs[fvIndex]));
+									// log("Error: Face " + std::to_string(f->id()) + " has invalid vertex ID: " + std::to_string(f->vs[fvIndex]));
 									continue;
 								}
-								
+	
 								V* fv = mesh->idVertices(f->vs[fvIndex]);
-								
+	
 								// 检查顶点是否存在
 								if (fv == nullptr) {
-									log("Error: Unable to get vertex ID: " + std::to_string(f->vs[fvIndex]) + " for face " + std::to_string(f->id()));
+									// log("Error: Unable to get vertex ID: " + std::to_string(f->vs[fvIndex]) + " for face " + std::to_string(f->id()));
 									continue;
 								}
-								
+	
 								if (f->boundary())
 								{
 									fv->boundary() = true;
-									log("Vertex " + std::to_string(fv->id()) + " marked as boundary vertex");
+									// log("Vertex " + std::to_string(fv->id()) + " marked as boundary vertex");
 								}
 								else
 								{
@@ -464,75 +473,75 @@ namespace HMeshLib
 										try {
 											// 检查面ID是否有效
 											if (fv->neighbor_fs[vfIndex] < 0 || fv->neighbor_fs[vfIndex] >= mesh->maxFid()) {
-												log("Warning: Vertex " + std::to_string(fv->id()) + " has invalid adjacent face ID: " + std::to_string(fv->neighbor_fs[vfIndex]));
+												// log("Warning: Vertex " + std::to_string(fv->id()) + " has invalid adjacent face ID: " + std::to_string(fv->neighbor_fs[vfIndex]));
 												continue;
 											}
-											
+	
 											F* fvf = mesh->idFaces(fv->neighbor_fs[vfIndex]);
-											
+	
 											// 检查面是否存在
 											if (fvf == nullptr) {
-												log("Warning: Unable to get adjacent face ID: " + std::to_string(fv->neighbor_fs[vfIndex]) + " for vertex " + std::to_string(fv->id()));
+												// log("Warning: Unable to get adjacent face ID: " + std::to_string(fv->neighbor_fs[vfIndex]) + " for vertex " + std::to_string(fv->id()));
 												continue;
 											}
-											
+	
 											if (fvf->boundary())
 											{
 												is_boundary = true;
-												log("Vertex " + std::to_string(fv->id()) + " marked as boundary vertex (via adjacent face)");
+												// log("Vertex " + std::to_string(fv->id()) + " marked as boundary vertex (via adjacent face)");
 												break;
 											}
 										}
 										catch (const std::exception& e) {
-											log("Exception in vertex-face processing: " + std::string(e.what()) + ", vertex ID: " + std::to_string(fv->id()) + ", face index: " + std::to_string(vfIndex));
+											// log("Exception in vertex-face processing: " + std::string(e.what()) + ", vertex ID: " + std::to_string(fv->id()) + ", face index: " + std::to_string(vfIndex));
 										}
 										catch (...) {
-											log("Unknown exception in vertex-face processing, vertex ID: " + std::to_string(fv->id()) + ", face index: " + std::to_string(vfIndex));
+											// log("Unknown exception in vertex-face processing, vertex ID: " + std::to_string(fv->id()) + ", face index: " + std::to_string(vfIndex));
 										}
 									}
 									fv->boundary() = is_boundary;
 								}
 							}
 							catch (const std::exception& e) {
-								log("Exception processing vertex at index " + std::to_string(fvIndex) + " for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
+								// log("Exception processing vertex at index " + std::to_string(fvIndex) + " for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
 							}
 							catch (...) {
-								log("Unknown exception processing vertex at index " + std::to_string(fvIndex) + " for face " + std::to_string(f->id()));
+								// log("Unknown exception processing vertex at index " + std::to_string(fvIndex) + " for face " + std::to_string(f->id()));
 							}
 						}
 					}
 					catch (const std::exception& e) {
-						log("Exception in vertices processing for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
+						// log("Exception in vertices processing for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
 					}
 					catch (...) {
-						log("Unknown exception in vertices processing for face " + std::to_string(f->id()));
+						// log("Unknown exception in vertices processing for face " + std::to_string(f->id()));
 					}
-					
+	
 					// 标记面边
 					try {
-						log("Marking " + std::to_string(f->es.size()) + " edges for face " + std::to_string(f->id()));
+						// log("Marking " + std::to_string(f->es.size()) + " edges for face " + std::to_string(f->id()));
 						for (int feIndex = 0; feIndex < f->es.size(); feIndex++)
 						{
 							try {
 								// 检查边ID是否有效
 								if (f->es[feIndex] < 0 || f->es[feIndex] >= mesh->maxEid()) {
-									log("Error: Face " + std::to_string(f->id()) + " has invalid edge ID: " + std::to_string(f->es[feIndex]));
+									// log("Error: Face " + std::to_string(f->id()) + " has invalid edge ID: " + std::to_string(f->es[feIndex]));
 									continue;
 								}
-								
+	
 								E* fe = mesh->idEdges(f->es[feIndex]);
-								
+	
 								// 检查边是否存在
 								if (fe == nullptr) {
-									log("Error: Unable to get edge ID: " + std::to_string(f->es[feIndex]) + " for face " + std::to_string(f->id()));
+									// log("Error: Unable to get edge ID: " + std::to_string(f->es[feIndex]) + " for face " + std::to_string(f->id()));
 									continue;
 								}
-								
+	
 								// 边界标记
 								if (f->boundary())
 								{
 									fe->boundary() = true;
-									log("Edge " + std::to_string(fe->id()) + " marked as boundary edge");
+									// log("Edge " + std::to_string(fe->id()) + " marked as boundary edge");
 								}
 								else
 								{
@@ -543,35 +552,35 @@ namespace HMeshLib
 										try {
 											// 检查面ID是否有效
 											if (fe->neighbor_fs[efIndex] < 0 || fe->neighbor_fs[efIndex] >= mesh->maxFid()) {
-												log("Warning: Edge " + std::to_string(fe->id()) + " has invalid adjacent face ID: " + std::to_string(fe->neighbor_fs[efIndex]));
+												// log("Warning: Edge " + std::to_string(fe->id()) + " has invalid adjacent face ID: " + std::to_string(fe->neighbor_fs[efIndex]));
 												continue;
 											}
-											
+	
 											F* fef = mesh->idFaces(fe->neighbor_fs[efIndex]);
-											
+	
 											// 检查面是否存在
 											if (fef == nullptr) {
-												log("Warning: Unable to get adjacent face ID: " + std::to_string(fe->neighbor_fs[efIndex]) + " for edge " + std::to_string(fe->id()));
+												// log("Warning: Unable to get adjacent face ID: " + std::to_string(fe->neighbor_fs[efIndex]) + " for edge " + std::to_string(fe->id()));
 												continue;
 											}
-											
+	
 											if (fef->boundary())
 											{
 												is_boundary = true;
-												log("Edge " + std::to_string(fe->id()) + " marked as boundary edge (via adjacent face)");
+												// log("Edge " + std::to_string(fe->id()) + " marked as boundary edge (via adjacent face)");
 												break;
 											}
 										}
 										catch (const std::exception& e) {
-											log("Exception in edge-face processing: " + std::string(e.what()) + ", edge ID: " + std::to_string(fe->id()) + ", face index: " + std::to_string(efIndex));
+											// log("Exception in edge-face processing: " + std::string(e.what()) + ", edge ID: " + std::to_string(fe->id()) + ", face index: " + std::to_string(efIndex));
 										}
 										catch (...) {
-											log("Unknown exception in edge-face processing, edge ID: " + std::to_string(fe->id()) + ", face index: " + std::to_string(efIndex));
+											// log("Unknown exception in edge-face processing, edge ID: " + std::to_string(fe->id()) + ", face index: " + std::to_string(efIndex));
 										}
 									}
 									fe->boundary() = is_boundary;
 								}
-
+	
 								try {
 									// 奇异性标记
 									if (fe->boundary())
@@ -579,7 +588,7 @@ namespace HMeshLib
 										if (fe->neighbor_hs.size() != 2)
 										{
 											fe->singularity() = true;
-											log("Boundary edge " + std::to_string(fe->id()) + " marked as singular edge, adjacent hexahedra count: " + std::to_string(fe->neighbor_hs.size()));
+											// log("Boundary edge " + std::to_string(fe->id()) + " marked as singular edge, adjacent hexahedra count: " + std::to_string(fe->neighbor_hs.size()));
 										}
 										else
 										{
@@ -591,7 +600,7 @@ namespace HMeshLib
 										if (fe->neighbor_hs.size() != 4)
 										{
 											fe->singularity() = true;
-											log("Non-boundary edge " + std::to_string(fe->id()) + " marked as singular edge, adjacent hexahedra count: " + std::to_string(fe->neighbor_hs.size()));
+											// log("Non-boundary edge " + std::to_string(fe->id()) + " marked as singular edge, adjacent hexahedra count: " + std::to_string(fe->neighbor_hs.size()));
 										}
 										else
 										{
@@ -600,12 +609,12 @@ namespace HMeshLib
 									}
 								}
 								catch (const std::exception& e) {
-									log("Exception in edge singularity marking: " + std::string(e.what()) + ", edge ID: " + std::to_string(fe->id()));
+									// log("Exception in edge singularity marking: " + std::string(e.what()) + ", edge ID: " + std::to_string(fe->id()));
 								}
 								catch (...) {
-									log("Unknown exception in edge singularity marking, edge ID: " + std::to_string(fe->id()));
+									// log("Unknown exception in edge singularity marking, edge ID: " + std::to_string(fe->id()));
 								}
-								
+	
 								try {
 									// 简化能量计算
 									if (fe->boundary())
@@ -614,7 +623,7 @@ namespace HMeshLib
 										{
 											// 检查总角度是否合理
 											if (fe->total_angle() < 0 || fe->total_angle() > 360) {
-												log("Warning: Edge " + std::to_string(fe->id()) + " has abnormal total angle value: " + std::to_string(fe->total_angle()));
+												// log("Warning: Edge " + std::to_string(fe->id()) + " has abnormal total angle value: " + std::to_string(fe->total_angle()));
 												// 使用默认值避免计算错误
 												fe->ideal_degree() = 2;
 											}
@@ -622,56 +631,56 @@ namespace HMeshLib
 												int ideal_degree = round(fe->total_angle() / 90.0);
 												ideal_degree = ideal_degree == 0 ? 1 : ideal_degree;
 												fe->ideal_degree() = ideal_degree;
-												log("Sharp boundary edge " + std::to_string(fe->id()) + " ideal degree set to: " + std::to_string(ideal_degree) + " (total angle: " + std::to_string(fe->total_angle()) + ")");
+												// log("Sharp boundary edge " + std::to_string(fe->id()) + " ideal degree set to: " + std::to_string(ideal_degree) + " (total angle: " + std::to_string(fe->total_angle()) + ")");
 											}
 										}
 										else
 										{
 											fe->ideal_degree() = 2;
-											log("Regular boundary edge " + std::to_string(fe->id()) + " ideal degree set to: 2");
+											// log("Regular boundary edge " + std::to_string(fe->id()) + " ideal degree set to: 2");
 										}
 									}
 									else
 									{
 										fe->ideal_degree() = 4;
-										log("Non-boundary edge " + std::to_string(fe->id()) + " ideal degree set to: 4");
+										// log("Non-boundary edge " + std::to_string(fe->id()) + " ideal degree set to: 4");
 									}
-									
+	
 									// 计算简化能量
 									fe->sim_energy() = (int)fe->ideal_degree() - (int)fe->neighbor_hs.size();
-									log("Edge " + std::to_string(fe->id()) + " simplification energy: " + std::to_string(fe->sim_energy()) + 
-										" (ideal degree: " + std::to_string(fe->ideal_degree()) + ", actual adjacent hexahedra: " + std::to_string(fe->neighbor_hs.size()) + ")");
+									// log("Edge " + std::to_string(fe->id()) + " simplification energy: " + std::to_string(fe->sim_energy()) +
+									// 	" (ideal degree: " + std::to_string(fe->ideal_degree()) + ", actual adjacent hexahedra: " + std::to_string(fe->neighbor_hs.size()) + ")");
 								}
 								catch (const std::exception& e) {
-									log("Exception in edge energy calculation: " + std::string(e.what()) + ", edge ID: " + std::to_string(fe->id()));
+									// log("Exception in edge energy calculation: " + std::string(e.what()) + ", edge ID: " + std::to_string(fe->id()));
 								}
 								catch (...) {
-									log("Unknown exception in edge energy calculation, edge ID: " + std::to_string(fe->id()));
+									// log("Unknown exception in edge energy calculation, edge ID: " + std::to_string(fe->id()));
 								}
 							}
 							catch (const std::exception& e) {
-								log("Exception processing edge at index " + std::to_string(feIndex) + " for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
+								// log("Exception processing edge at index " + std::to_string(feIndex) + " for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
 							}
 							catch (...) {
-								log("Unknown exception processing edge at index " + std::to_string(feIndex) + " for face " + std::to_string(f->id()));
+								// log("Unknown exception processing edge at index " + std::to_string(feIndex) + " for face " + std::to_string(f->id()));
 							}
 						}
 					}
 					catch (const std::exception& e) {
-						log("Exception in edges processing for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
+						// log("Exception in edges processing for face " + std::to_string(f->id()) + ": " + std::string(e.what()));
 					}
 					catch (...) {
-						log("Unknown exception in edges processing for face " + std::to_string(f->id()));
+						// log("Unknown exception in edges processing for face " + std::to_string(f->id()));
 					}
 				}
 				catch (const std::exception& e) {
-					log("Exception in second traversal at face index " + std::to_string(fIndex) + ": " + std::string(e.what()));
+					// log("Exception in second traversal at face index " + std::to_string(fIndex) + ": " + std::string(e.what()));
 				}
 				catch (...) {
-					log("Unknown exception in second traversal at face index " + std::to_string(fIndex));
+					// log("Unknown exception in second traversal at face index " + std::to_string(fIndex));
 				}
 			}
-			
+	
 			log("Element attribute marking completed");
 		}
 		catch (const std::exception& e) {
@@ -685,179 +694,190 @@ namespace HMeshLib
 	template<typename M>
 	void sheet_operation<M>::collapse_one_sheet2(std::vector<E*> sheet)
 	{
-		log("Starting to process sheet");
+		log("Starting to process sheet, size: " + std::to_string(sheet.size()));
 		/*get all the hexs and the include elements*/
 		std::set<H*> delete_hs;//get all hex in sheet
 		std::set<F*> delete_fs;//delete faces
 		std::set<E*> delete_es;//delete edges
 		std::set<V*> delete_vs;//delete vs
-		
+	
 		// 先收集需要删除的六面体及其关联的元素
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
 		{
 			E* e = sheet[eIndex];
+			if (!e) continue; // Sanity check
 			e->sheetId() = 1;
-			log("Processing edge id: " + std::to_string(e->id()));
+			// log("Processing edge id: " + std::to_string(e->id())); // Already Commented out
 			//find all hex
 			for (int ehIndex = 0; ehIndex < e->neighbor_hs.size(); ehIndex++)
 			{
 				H* h = mesh->idHexs(e->neighbor_hs[ehIndex]);
-				if ( h->is_delete()) continue;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
-
+				if (!h || h->is_delete()) continue; // Check for null and already marked
+	
 				h->is_delete() = true;
-				h->sheetId() = 1;
+				h->sheetId() = -1; // Mark hex related to the sheet collapse
 				delete_hs.insert(h);
-
+	
 				/*mark the delete face and the elements of it*/
 				for (int hvIndex = 0; hvIndex < h->vs.size(); hvIndex++)
 				{
 					V* hv = mesh->idVertices(h->vs[hvIndex]);
-
+					if (hv && !hv->is_delete()) { // Check for null and already marked
 						hv->is_delete() = true;
 						delete_vs.insert(hv);
-
+					}
 				}
 				for (int heIndex = 0; heIndex < h->es.size(); heIndex++)
 				{
 					E* he = mesh->idEdges(h->es[heIndex]);
-
+					if (he && !he->is_delete()) { // Check for null and already marked
 						he->is_delete() = true;
 						delete_es.insert(he);
-
+					}
 				}
 				for (int hfIndex = 0; hfIndex < h->fs.size(); hfIndex++)
 				{
 					F* hf = mesh->idFaces(h->fs[hfIndex]);
-
+					if (hf && !hf->is_delete()) { // Check for null and already marked
 						hf->is_delete() = true;
 						delete_fs.insert(hf);
-					
+					}
 				}
 			}
 		}
-		log("loaded Hex count: " + std::to_string(delete_hs.size()));
-		log("loaded Face count: " + std::to_string(delete_fs.size()));
-		log("loaded Edge count: " + std::to_string(delete_es.size()));
-		log("loaded Vertex count: " + std::to_string(delete_vs.size()));
-
+		log("Collected elements to delete - Hexes: " + std::to_string(delete_hs.size()) +
+			", Faces: " + std::to_string(delete_fs.size()) +
+			", Edges: " + std::to_string(delete_es.size()) +
+			", Vertices: " + std::to_string(delete_vs.size()));
+	
 		/*exit if there is self-intersection*/
 		for (std::set<H*>::iterator hite = delete_hs.begin(); hite != delete_hs.end(); hite++)
 		{
 			H* h = *hite;
+			if (!h) continue;
 			int count = 0;
 			for (int heIndex = 0; heIndex < h->es.size(); heIndex++)
 			{
 				E* e = mesh->idEdges(h->es[heIndex]);
-				if (e->sheetId())
+				if (e && e->sheetId()) // Check for null
 				{
 					count++;
 				}
 			}
 			if (count > 4)
 			{
-				log("Self-intersection detected at hex id: " + std::to_string(h->id()));
+				log("Self-intersection detected at hex id: " + std::to_string(h->id()) + ". Aborting collapse.");
 				std::cout << "The current sheet has self-intersection" << std::endl;
-				
+	
 				// 清除之前设置的is_delete标记，因为我们不会继续折叠
-				for (std::set<H*>::iterator h_iter = delete_hs.begin(); h_iter != delete_hs.end(); h_iter++) {
-					if (*h_iter) (*h_iter)->is_delete() = false;
-				}
-				for (std::set<F*>::iterator f_iter = delete_fs.begin(); f_iter != delete_fs.end(); f_iter++) {
-					if (*f_iter) (*f_iter)->is_delete() = false;
-				}
-				for (std::set<E*>::iterator e_iter = delete_es.begin(); e_iter != delete_es.end(); e_iter++) {
-					if (*e_iter) (*e_iter)->is_delete() = false;
-				}
-				for (std::set<V*>::iterator v_iter = delete_vs.begin(); v_iter != delete_vs.end(); v_iter++) {
-					if (*v_iter) (*v_iter)->is_delete() = false;
-				}
+				for (H* h_del : delete_hs) { if (h_del) h_del->is_delete() = false; }
+				for (F* f_del : delete_fs) { if (f_del) f_del->is_delete() = false; }
+				for (E* e_del : delete_es) { if (e_del) e_del->is_delete() = false; }
+				for (V* v_del : delete_vs) { if (v_del) v_del->is_delete() = false; }
+				// Also reset sheetId for the original sheet edges
+				for (E* e_sheet : sheet) { if (e_sheet) e_sheet->sheetId() = 0; }
+				// Reset sheetId for hexes that were marked
+				for (H* h_del : delete_hs) { if (h_del) h_del->sheetId() = 0; }
+	
 				return;
 			}
 		}
-
+	
 		/*new elements*/
 		std::vector<V*> newvs;
 		std::vector<E*> newes;
 		std::vector<F*> newfs;
 		/*add new vertices*/
-		log("Starting new vertex creation");
+		log("Starting new vertex creation and topology update");
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
 		{
 			E* e = sheet[eIndex];
+			if (!e) continue;
 			V* newv = construct_new_vertex();
-			log("Created new vertex id: " + std::to_string(newv->id()));
+			// log("Created new vertex id: " + std::to_string(newv->id())); // Already Commented out
 			newvs.push_back(newv);
-
+	
 			V* ev1 = mesh->idVertices(e->vs[0]);
 			V* ev2 = mesh->idVertices(e->vs[1]);
+			if (!ev1 || !ev2) {
+				log("Error: Could not find vertices for edge " + std::to_string(e->id()) + ". Skipping topology update for this edge.");
+				continue; // Skip if original vertices are missing
+			}
 			vertex_position_policy(ev1, ev2, newv);
-
+	
 			std::vector<V*> evs = { ev1,ev2 };
-			e->setNewv(newv);
+			e->setNewv(newv); // Associate new vertex with the original sheet edge
 			//change relations
 			for (int evIndex = 0; evIndex < 2; evIndex++)
 			{
 				V* oldv = evs[evIndex];
 				if (!oldv) continue;
-				
-				//change edge relations
-				for (int veIndex = 0; veIndex < oldv->neighbor_es.size(); veIndex++)
+	
+				//change edge relations - update edges connected to oldv (if not deleted) to point to newv
+				std::vector<int> old_neighbor_es = oldv->neighbor_es; // Copy because original might be modified indirectly
+				for (int eid : old_neighbor_es)
 				{
-					E* ve = mesh->idEdges(oldv->neighbor_es[veIndex]);
-					if (ve->is_delete()) continue;
+					E* ve = mesh->idEdges(eid);
+					// Only update edges that are NOT marked for deletion
+					if (!ve || ve->is_delete()) continue;
 					int vevIndex = ve->vertexIndex(oldv->id());
 					if (vevIndex != -1) {
 						ve->vs[vevIndex] = newv->id();
 						newv->neighbor_es.push_back(ve->id());
-						
+						// Remove oldv's reference to this edge? No, oldv is being deleted.
 					}
 				}
-				//change face relations
-				for (int vfIndex = 0; vfIndex < oldv->neighbor_fs.size(); vfIndex++)
+				//change face relations - update faces connected to oldv (if not deleted) to point to newv
+				std::vector<int> old_neighbor_fs = oldv->neighbor_fs; // Copy
+				for (int fid : old_neighbor_fs)
 				{
-					F* vf = mesh->idFaces(oldv->neighbor_fs[vfIndex]);
-					if (vf->is_delete()) continue;
+					F* vf = mesh->idFaces(fid);
+					// Only update faces that are NOT marked for deletion
+					if (!vf || vf->is_delete()) continue;
 					int vfvIndex = vf->vertexIndex(oldv->id());
-					if (vfvIndex == -1)
+					if (vfvIndex != -1)
 					{
-						continue;
+						vf->vs[vfvIndex] = newv->id();
+						newv->neighbor_fs.push_back(vf->id());
 					}
-					vf->vs[vfvIndex] = newv->id();
-					newv->neighbor_fs.push_back(vf->id());
-					
 				}
-				//change hex relations
-				for (int vhIndex = 0; vhIndex < oldv->neighbor_hs.size(); vhIndex++)
+				//change hex relations - update hexes connected to oldv (if not deleted) to point to newv
+				std::vector<int> old_neighbor_hs = oldv->neighbor_hs; // Copy
+				for (int hid : old_neighbor_hs)
 				{
-					H* vh = mesh->idHexs(oldv->neighbor_hs[vhIndex]);
-					if (vh->is_delete()) continue;
+					H* vh = mesh->idHexs(hid);
+					// Only update hexes that are NOT marked for deletion
+					if (!vh || vh->is_delete()) continue;
 					int vhvIndex = vh->vertexIndex(oldv->id());
-					if (vhvIndex == -1)
+					if (vhvIndex != -1)
 					{
-						continue;
+						vh->vs[vhvIndex] = newv->id();
+						newv->neighbor_hs.push_back(vh->id());
 					}
-					vh->vs[vhvIndex] = newv->id();
-					newv->neighbor_hs.push_back(vh->id());
-					
 				}
 			}
 		}
-		log("Vertex creation completed");
+		log("Vertex creation and topology update completed. New vertices: " + std::to_string(newvs.size()));
+	
 		/*create new edges and faces*/
+		log("Starting new edge/face creation");
 		for (std::set<H*>::iterator hite = delete_hs.begin(); hite != delete_hs.end(); hite++)
 		{
 			H* h = *hite;
-			log("Processing hex (new edge/face creation) id: " + std::to_string(h->id()));
-			//find the faces without mark edges
-			std::vector<F*> fs;
+			if (!h) continue;
+			// log("Processing hex (new edge/face creation) id: " + std::to_string(h->id())); // Already Commented out
+			//find the faces without mark edges (sheet edges)
+			std::vector<F*> fs; // Pair of parallel faces in the hex not touching the sheet edges
+			F* found_hf = nullptr;
 			for (int hfIndex = 0; hfIndex < h->fs.size(); hfIndex++)
 			{
 				F* hf = mesh->idFaces(h->fs[hfIndex]);
+				if (!hf) continue; // Should not happen if collected properly
 				bool without_mark_edge = true;
 				for (int feIndex = 0; feIndex < hf->es.size(); feIndex++)
 				{
 					E* fe = mesh->idEdges(hf->es[feIndex]);
-					if (fe->sheetId())
+					if (fe && fe->sheetId()) // Check if edge belongs to the input sheet
 					{
 						without_mark_edge = false;
 						break;
@@ -865,18 +885,26 @@ namespace HMeshLib
 				}
 				if (without_mark_edge)
 				{
-					F* parallel_f = mesh->f_parallel_f_in_hex(h, hf);
-					parallel_f->sheetId() = 1;
-					fs = { hf,parallel_f };
+					// Check if this face or its parallel face has already been processed via sheetId()
+					if (hf->sheetId() == 0) { // Use sheetId() on faces to mark processed pairs
+						F* parallel_f = mesh->f_parallel_f_in_hex(h, hf);
+						if (parallel_f && parallel_f->sheetId() == 0) {
+							hf->sheetId() = 1; // Mark this pair as processed
+							parallel_f->sheetId() = 1;
+							fs = { hf, parallel_f };
+							found_hf = hf; // Keep track of which face we used as base
+							break; // Found a valid pair
+						}
+					}
 				}
 			}
-			
+	
 			// 如果没有找到符合条件的面，继续下一个六面体
-			if (fs.empty()) {
-				log("  No suitable faces found for hex " + std::to_string(h->id()));
+			if (fs.empty() || !found_hf) {
+				// log("  No suitable faces found for hex " + std::to_string(h->id())); // Commented out
 				continue;
 			}
-			
+	
 			/*create the new edgs*/
 			F* f = fs[0];
 			std::vector<V*> FNewVs;
@@ -965,300 +993,105 @@ namespace HMeshLib
 				}
 			}
 		}
-
-		// 在删除元素之前先完成所有需要访问映射表的操作
-		log("Starting marking element attributes");
-		try {
-			log("New faces count: " + std::to_string(newfs.size()));
-			//mark_elements_attribute_collapse(newfs);
-			log("Element attribute marking completed");
-			
-			log("Starting marking singularities");
-			//mesh->singularities = mesh->mark_singularity();
-			log("Singularities marking completed: " + std::to_string(mesh->singularities.size()) + " singularities found");
-			
-			// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
-			log("Mesh vertex count: " + std::to_string(mesh->vs.size()));
-			log("Mesh edge count: " + std::to_string(mesh->es.size()));
-			log("Mesh face count: " + std::to_string(mesh->fs.size()));
-			log("Mesh hexahedron count: " + std::to_string(mesh->hs.size()));
-
-			// 在这里执行其他需要映射表的操作
-			// 验证映射表完整性
-			for (int i = 0; i < newfs.size(); i++) {
-				F* f = newfs[i];
-				log("Checking face " + std::to_string(f->id()));
-				log("  vs size: " + std::to_string(f->vs.size()));
-				log("  es size: " + std::to_string(f->es.size()));
-				log("  neighbor_hs size: " + std::to_string(f->neighbor_hs.size()));
-				// 检查顶点是否都有效
-				for (int j = 0; j < f->vs.size(); j++) {
-					if (f->vs[j] < 0 || f->vs[j] >= mesh->maxVid()) {
-						log("  Warning: Invalid vertex ID: " + std::to_string(f->vs[j]));
-					}
-				}
-				// 检查边是否都有效
-				for (int j = 0; j < f->es.size(); j++) {
-					if (f->es[j] < 0 || f->es[j] >= mesh->maxEid()) {
-						log("  Warning: Invalid edge ID: " + std::to_string(f->es[j]));
-					}
-				}
-			}
-			// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
-			log("Mesh vertex count before deletion: " + std::to_string(mesh->vs.size()));
-			log("Mesh edge count before deletion: " + std::to_string(mesh->es.size()));
-			log("Mesh face count before deletion: " + std::to_string(mesh->fs.size()));
-			log("Mesh hexahedron count before deletion: " + std::to_string(mesh->hs.size()));
-		}
-		catch (const std::exception& e) {
-			log("Exception occurred during attribute marking: " + std::string(e.what()));
-		}
-		catch (...) {
-			log("Unknown exception occurred during attribute marking");
-		}
-
-		// 执行完所有需要访问映射表的操作后，才开始删除元素
+	
+	
+		// 在删除元素之前先完成所有需要访问映射表的操作 (e.g., attribute marking if uncommented)
+		// log("Starting marking element attributes"); // Example if needed
+		// try {
+		// 	// log("New faces count: " + std::to_string(newfs.size()));
+		// 	// mark_elements_attribute_collapse(newfs); // Call if needed
+		// 	// log("Element attribute marking completed");
+		// } catch (...) {
+		//      log("Exception during attribute marking.");
+		// }
+	
+	
+		// --- Optimized Deletion ---
 		log("Starting deletion operations");
-		
-		// 收集所有被标记为删除的元素的ID
-		std::set<int> hex_ids_to_delete;
-		std::set<int> face_ids_to_delete;
-		std::set<int> edge_ids_to_delete;
-		std::set<int> vertex_ids_to_delete;
-		
-		for (auto h : delete_hs) {
-			if (h) hex_ids_to_delete.insert(h->id());
-		}
-		
-		for (auto f : delete_fs) {
-			if (f) face_ids_to_delete.insert(f->id());
-		}
-		
-		for (auto e : delete_es) {
-			if (e) edge_ids_to_delete.insert(e->id());
-		}
-		
-		for (auto v : delete_vs) {
-			if (v) vertex_ids_to_delete.insert(v->id());
-		}
-		
-		log("IDs to delete - Hexes: " + std::to_string(hex_ids_to_delete.size()) + 
-			", Faces: " + std::to_string(face_ids_to_delete.size()) + 
-			", Edges: " + std::to_string(edge_ids_to_delete.size()) + 
-			", Vertices: " + std::to_string(vertex_ids_to_delete.size()));
-
-		/*test if the delete is ok with out topo relation update here
-		// 更新关联关系，移除被删除元素的引用
-		for (auto h : mesh->hs) {
-			if (h && !h->is_delete()) {
-				// 检查并更新六面体的面
-				for (int i = 0; i < h->fs.size(); i++) {
-					if (face_ids_to_delete.find(h->fs[i]) != face_ids_to_delete.end()) {
-						log("Warning: Hex " + std::to_string(h->id()) + " references deleted face " + std::to_string(h->fs[i]));
-					}
-				}
-				
-				// 检查并更新六面体的边
-				for (int i = 0; i < h->es.size(); i++) {
-					if (edge_ids_to_delete.find(h->es[i]) != edge_ids_to_delete.end()) {
-						log("Warning: Hex " + std::to_string(h->id()) + " references deleted edge " + std::to_string(h->es[i]));
-					}
-				}
-				
-				// 检查并更新六面体的顶点
-				for (int i = 0; i < h->vs.size(); i++) {
-					if (vertex_ids_to_delete.find(h->vs[i]) != vertex_ids_to_delete.end()) {
-						log("Warning: Hex " + std::to_string(h->id()) + " references deleted vertex " + std::to_string(h->vs[i]));
-					}
-				}
+	
+		// 1. Erase from maps using the collected pointers/IDs
+		int deleted_hexes_map = 0;
+		for (H* h : delete_hs) {
+			if (h && mesh->m_map_hexs.erase(h->id())) {
+				deleted_hexes_map++;
 			}
 		}
-		
-		for (auto f : mesh->fs) {
-			if (f && !f->is_delete()) {
-				// 检查并更新面的边
-				for (int i = 0; i < f->es.size(); i++) {
-					if (edge_ids_to_delete.find(f->es[i]) != edge_ids_to_delete.end()) {
-						log("Warning: Face " + std::to_string(f->id()) + " references deleted edge " + std::to_string(f->es[i]));
-					}
-				}
-				
-				// 检查并更新面的顶点
-				for (int i = 0; i < f->vs.size(); i++) {
-					if (vertex_ids_to_delete.find(f->vs[i]) != vertex_ids_to_delete.end()) {
-						log("Warning: Face " + std::to_string(f->id()) + " references deleted vertex " + std::to_string(f->vs[i]));
-					}
-				}
-				
-				// 更新面的相邻六面体列表
-				std::vector<int> updated_neighbor_hs;
-				for (auto hid : f->neighbor_hs) {
-					if (hex_ids_to_delete.find(hid) == hex_ids_to_delete.end()) {
-						updated_neighbor_hs.push_back(hid);
-					}
-				}
-				f->neighbor_hs = updated_neighbor_hs;
+		log("Removed " + std::to_string(deleted_hexes_map) + " hex entries from map");
+	
+		int deleted_faces_map = 0;
+		for (F* f : delete_fs) {
+			if (f && mesh->m_map_faces.erase(f->id())) {
+				deleted_faces_map++;
 			}
 		}
-		
-		for (auto e : mesh->es) {
-			if (e && !e->is_delete()) {
-				// 检查并更新边的顶点
-				for (int i = 0; i < e->vs.size(); i++) {
-					if (vertex_ids_to_delete.find(e->vs[i]) != vertex_ids_to_delete.end()) {
-						log("Warning: Edge " + std::to_string(e->id()) + " references deleted vertex " + std::to_string(e->vs[i]));
-					}
-				}
-				
-				// 更新边的相邻面列表
-				std::vector<int> updated_neighbor_fs;
-				for (auto fid : e->neighbor_fs) {
-					if (face_ids_to_delete.find(fid) == face_ids_to_delete.end()) {
-						updated_neighbor_fs.push_back(fid);
-					}
-				}
-				e->neighbor_fs = updated_neighbor_fs;
-				
-				// 更新边的相邻六面体列表
-				std::vector<int> updated_neighbor_hs;
-				for (auto hid : e->neighbor_hs) {
-					if (hex_ids_to_delete.find(hid) == hex_ids_to_delete.end()) {
-						updated_neighbor_hs.push_back(hid);
-					}
-				}
-				e->neighbor_hs = updated_neighbor_hs;
+		 log("Removed " + std::to_string(deleted_faces_map) + " face entries from map");
+	
+		int deleted_edges_map = 0;
+		for (E* e : delete_es) {
+			if (e && mesh->m_map_edges.erase(e->id())) {
+				deleted_edges_map++;
 			}
 		}
-		
-		for (auto v : mesh->vs) {
-			if (v && !v->is_delete()) {
-				// 更新顶点的相邻边列表
-				std::vector<int> updated_neighbor_es;
-				for (auto eid : v->neighbor_es) {
-					if (edge_ids_to_delete.find(eid) == edge_ids_to_delete.end()) {
-						updated_neighbor_es.push_back(eid);
-					}
-				}
-				v->neighbor_es = updated_neighbor_es;
-				
-				// 更新顶点的相邻面列表
-				std::vector<int> updated_neighbor_fs;
-				for (auto fid : v->neighbor_fs) {
-					if (face_ids_to_delete.find(fid) == face_ids_to_delete.end()) {
-						updated_neighbor_fs.push_back(fid);
-					}
-				}
-				v->neighbor_fs = updated_neighbor_fs;
-				
-				// 更新顶点的相邻六面体列表
-				std::vector<int> updated_neighbor_hs;
-				for (auto hid : v->neighbor_hs) {
-					if (hex_ids_to_delete.find(hid) == hex_ids_to_delete.end()) {
-						updated_neighbor_hs.push_back(hid);
-					}
-				}
-				v->neighbor_hs = updated_neighbor_hs;
+		log("Removed " + std::to_string(deleted_edges_map) + " edge entries from map");
+	
+		int deleted_vertices_map = 0;
+		for (V* v : delete_vs) {
+			if (v && mesh->m_map_vertices.erase(v->id())) {
+				deleted_vertices_map++;
 			}
 		}
-		*/
-		//delete hex
-		int deleted_hexes = 0;
-		std::list<H*>::iterator hite = mesh->hs.begin();
-		while (hite != mesh->hs.end())
-		{
-			H* h = *hite;
-			if (h == NULL)
-			{
-				hite = mesh->hs.erase(hite);
-				deleted_hexes++;
+		log("Removed " + std::to_string(deleted_vertices_map) + " vertex entries from map");
+	
+	
+		// 2. Remove from lists using the pointer sets and delete objects
+		int deleted_hexes_list = 0;
+		mesh->hs.remove_if([&delete_hs, &deleted_hexes_list](H* h) {
+			if (h == nullptr) return true; // Remove null pointers if any
+			if (delete_hs.count(h)) {
+				delete h; // Delete the object
+				deleted_hexes_list++;
+				return true; // Remove pointer from list
 			}
-			else if (h->is_delete())
-			{
-				mesh->m_map_hexs.erase(h->id());
-				hite = mesh->hs.erase(hite);
-				deleted_hexes++;
+			return false;
+		});
+		log("Deleted " + std::to_string(deleted_hexes_list) + " hexahedra objects and list entries");
+	
+		int deleted_faces_list = 0;
+		mesh->fs.remove_if([&delete_fs, &deleted_faces_list](F* f) {
+			if (f == nullptr) return true;
+			if (delete_fs.count(f)) {
+				delete f;
+				deleted_faces_list++;
+				return true;
 			}
-			else
-			{
-				++hite;
+			return false;
+		});
+		log("Deleted " + std::to_string(deleted_faces_list) + " face objects and list entries");
+	
+		int deleted_edges_list = 0;
+		mesh->es.remove_if([&delete_es, &deleted_edges_list](E* e) {
+			if (e == nullptr) return true;
+			if (delete_es.count(e)) {
+				delete e;
+				deleted_edges_list++;
+				return true;
 			}
-		}
-		log("Deleted " + std::to_string(deleted_hexes) + " hexahedra");
-
-		//delete face
-		int deleted_faces = 0;
-		std::list<F*>::iterator fite = mesh->fs.begin();
-		while (fite != mesh->fs.end())
-		{
-			F* f = *fite;
-			if (f == NULL)
-			{
-				fite = mesh->fs.erase(fite);
-				deleted_faces++;
+			return false;
+		});
+		 log("Deleted " + std::to_string(deleted_edges_list) + " edge objects and list entries");
+	
+		int deleted_vertices_list = 0;
+		mesh->vs.remove_if([&delete_vs, &deleted_vertices_list](V* v) {
+			if (v == nullptr) return true;
+			if (delete_vs.count(v)) {
+				delete v;
+				deleted_vertices_list++;
+				return true;
 			}
-			else if (f->is_delete())
-			{
-				mesh->m_map_faces.erase(f->id());
-				fite = mesh->fs.erase(fite);
-				deleted_faces++;
-			}
-			else
-			{
-				++fite;
-			}
-		}
-		log("Deleted " + std::to_string(deleted_faces) + " faces");
-		
-		//delete edge
-		int deleted_edges = 0;
-		std::list<E*>::iterator eite = mesh->es.begin();
-		while (eite != mesh->es.end())
-		{
-			E* e = *eite;
-			if (e == NULL)
-			{
-				eite = mesh->es.erase(eite);
-				deleted_edges++;
-			}
-			else if (edge_ids_to_delete.find(e->id()) != edge_ids_to_delete.end() && e->is_delete())
-			{
-				// 只有在ID列表中且标记为删除的边才被删除
-				mesh->m_map_edges.erase(e->id());
-				eite = mesh->es.erase(eite);
-				deleted_edges++;
-			}
-			else
-			{
-				++eite;
-			}
-		}
-		log("Deleted " + std::to_string(deleted_edges) + " edges");
-		
-		//delete vertex
-		int deleted_vertices = 0;
-		std::list<V*>::iterator vite = mesh->vs.begin();
-		while (vite != mesh->vs.end())
-		{
-			V* v = *vite;
-			if (v == NULL)
-			{
-				vite = mesh->vs.erase(vite);
-				deleted_vertices++;
-			}
-			else if (vertex_ids_to_delete.find(v->id()) != vertex_ids_to_delete.end() && v->is_delete())
-			{
-				// 只有在ID列表中且标记为删除的顶点才被删除
-				mesh->m_map_vertices.erase(v->id());
-				vite = mesh->vs.erase(vite);
-				deleted_vertices++;
-			}
-			else
-			{
-				++vite;
-			}
-		}
-		log("Deleted " + std::to_string(deleted_vertices) + " vertices");
-		
+			return false;
+		});
+		log("Deleted " + std::to_string(deleted_vertices_list) + " vertex objects and list entries");
+	
 		log("Deletion operations completed");
 		// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
 		log("Mesh vertex count: " + std::to_string(mesh->vs.size()));
@@ -1285,22 +1118,11 @@ namespace HMeshLib
 	void sheet_operation<M>::edge_angle(E* e)
 	{
 		try {
-			log("Computing angle for edge ID: " + std::to_string(e->id()));
+			log("Computing angle for edge ID: " + std::to_string(e->id()) + " (Unconditional calculation)");
 			
-			// 如果已经有值，检查是否为有效值（避免使用未初始化的内存垃圾值）
-			if (e->total_angle() != 0)
-			{
-				// 添加有效性检查，确保 total_angle 的值在合理范围内
-				if (std::isfinite(e->total_angle()) && e->total_angle() > 0 && e->total_angle() <= 1080) {
-					log("Edge " + std::to_string(e->id()) + " already has valid total angle: " + std::to_string(e->total_angle()));
-					return;
-				} else {
-					log("Edge " + std::to_string(e->id()) + " has invalid total angle: " + std::to_string(e->total_angle()) + ", recalculating...");
-					// 重置异常值
-					e->total_angle() = 0;
-				}
-			}
-			
+			// 移除入口检查，总是执行计算
+			e->total_angle() = 0; // 重置 total_angle 以便累加
+
 			// 非边界边处理
 			if (!e->boundary())
 			{
@@ -1393,7 +1215,7 @@ namespace HMeshLib
 					total_angle += temp_angle;
 					valid_angles_count++;
 					
-					log("  Hex " + std::to_string(eh->id()) + " contributes angle: " + std::to_string(temp_angle) + " to edge " + std::to_string(e->id()));
+					// log("  Hex " + std::to_string(eh->id()) + " contributes angle: " + std::to_string(temp_angle) + " to edge " + std::to_string(e->id())); // Commented out
 				}
 				catch (const std::exception& ex) {
 					log("Exception in edge angle calculation for hex " + std::to_string(eh->id()) + ": " + std::string(ex.what()));
@@ -1442,21 +1264,10 @@ namespace HMeshLib
 	void sheet_operation<M>::edge_ideal_degree(E* e)
 	{
 		try {
-			log("Computing ideal degree for edge ID: " + std::to_string(e->id()));
+			log("Computing ideal degree for edge ID: " + std::to_string(e->id()) + " (Unconditional calculation)");
 			
-			// 如果已经有值，检查是否为有效值（避免使用未初始化的内存垃圾值）
-			if (e->ideal_degree() != 0)
-			{
-				// 添加有效性检查，确保 ideal_degree 的值在合理范围内
-				if (e->ideal_degree() >= 1 && e->ideal_degree() <= 12) {
-					log("Edge " + std::to_string(e->id()) + " already has valid ideal degree: " + std::to_string(e->ideal_degree()));
-					return;
-				} else {
-					log("Edge " + std::to_string(e->id()) + " has abnormal ideal degree: " + std::to_string(e->ideal_degree()) + ", recalculating...");
-					// 重置异常值
-					e->ideal_degree() = 0;
-				}
-			}
+			// 移除入口检查，总是执行计算
+			// ideal_degree 会在下面被赋值，无需在此处重置
 
 			if (e->boundary())
 			{
@@ -1546,19 +1357,19 @@ namespace HMeshLib
 				if (e->sharp()) sharpEdges++;
 				if (e->singularity()) singularEdges++;
 				
-				// 记录特殊边的详细信息
-				if (e->boundary() || e->sharp() || e->singularity()) {
-					std::ostringstream details;
-					details << "Edge " << e->id() 
-						<< " (boundary: " << (e->boundary() ? "yes" : "no") 
-						<< ", sharp: " << (e->sharp() ? std::to_string(e->sharp()) : "no")
-						<< ", singularity: " << (e->singularity() ? "yes" : "no") << ")";
-					details << " - total angle: " << e->total_angle()
-						<< ", ideal degree: " << e->ideal_degree()
-						<< ", actual degree: " << e->neighbor_hs.size()
-						<< ", energy: " << e->sim_energy();
-					log(details.str());
-				}
+				// 记录特殊边的详细信息 (注释掉，保留每1000条的进度日志)
+				// if (e->boundary() || e->sharp() || e->singularity()) {
+				// 	std::ostringstream details;
+				// 	details << "Edge " << e->id()
+				// 		<< " (boundary: " << (e->boundary() ? "yes" : "no")
+				// 		<< ", sharp: " << (e->sharp() ? std::to_string(e->sharp()) : "no")
+				// 		<< ", singularity: " << (e->singularity() ? "yes" : "no") << ")";
+				// 	details << " - total angle: " << e->total_angle()
+				// 		<< ", ideal degree: " << e->ideal_degree()
+				// 		<< ", actual degree: " << e->neighbor_hs.size()
+				// 		<< ", energy: " << e->sim_energy();
+				// 	log(details.str());
+				// }
 			}
 			catch (const std::exception& ex) {
 				log("Exception processing edge ID " + std::to_string(e->id()) + ": " + std::string(ex.what()));
@@ -1618,8 +1429,7 @@ namespace HMeshLib
 					continue;
 				}
 				
-				log("  Processing edge ID: " + std::to_string(e->id()) + 
-					", Adjacent hexahedra: " + std::to_string(e->neighbor_hs.size()));
+				// log("  Processing edge ID: " + std::to_string(e->id()) + ", Adjacent hexahedra: " + std::to_string(e->neighbor_hs.size())); // Commented out
 				edgesProcessed++;
 				
 				for (int ehIndex = 0; ehIndex < e->neighbor_hs.size(); ehIndex++)
@@ -1638,10 +1448,10 @@ namespace HMeshLib
 							continue;
 						}
 						
-						log("    Processing adjacent hexahedron ID: " + std::to_string(eh->id()));
+						// log("    Processing adjacent hexahedron ID: " + std::to_string(eh->id())); // Commented out
 						
 						if (eh->mark()!=0) {
-							log("    Hexahedron already processed, skipping");
+							// log("    Hexahedron already processed, skipping"); // Commented out
 							continue;
 						}
 						
@@ -1653,10 +1463,10 @@ namespace HMeshLib
 						std::vector<F*> nfs;
 						try {
 							nfs = mesh->e_adj_f_in_hex(eh, e);
-							log("    Found " + std::to_string(nfs.size()) + " adjacent faces in hexahedron");
+							// log("    Found " + std::to_string(nfs.size()) + " adjacent faces in hexahedron"); // Commented out
 							
 							if (nfs.size() < 1) {
-								log("    Warning: No adjacent faces found for edge in hexahedron");
+								// log("    Warning: No adjacent faces found for edge in hexahedron"); // Commented out
 								continue;
 							}
 						}
@@ -1671,7 +1481,7 @@ namespace HMeshLib
 							continue;
 						}
 						
-						log("    Using adjacent face ID: " + std::to_string(nf->id()));
+						// log("    Using adjacent face ID: " + std::to_string(nf->id())); // Commented out
 
 						//获取边的顶点
 						if (e->vs.size() < 2) {
@@ -1693,7 +1503,7 @@ namespace HMeshLib
 							continue;
 						}
 						
-						log("    Edge vertices: " + std::to_string(ev1->id()) + " and " + std::to_string(ev2->id()));
+						// log("    Edge vertices: " + std::to_string(ev1->id()) + " and " + std::to_string(ev2->id())); // Commented out
 
 						//获取第一个翻转边
 						E* ne1 = nullptr;
@@ -1711,7 +1521,7 @@ namespace HMeshLib
 								continue;
 							}
 							
-							log("    First flip edges: " + std::to_string(ne1->id()) + " and " + std::to_string(ne2->id()));
+							// log("    First flip edges: " + std::to_string(ne1->id()) + " and " + std::to_string(ne2->id())); // Commented out
 						}
 						catch(const std::exception& ex) {
 							log("    Exception during edge flipping: " + std::string(ex.what()));
@@ -1734,7 +1544,7 @@ namespace HMeshLib
 								continue;
 							}
 							
-							log("    First flip faces: " + std::to_string(nf1->id()) + " and " + std::to_string(nf2->id()));
+							// log("    First flip faces: " + std::to_string(nf1->id()) + " and " + std::to_string(nf2->id())); // Commented out
 						}
 						catch(const std::exception& ex) {
 							log("    Exception during face flipping: " + std::string(ex.what()));
@@ -1742,11 +1552,11 @@ namespace HMeshLib
 						}
 
 						//找平行边对
-						log("    Starting to find parallel edge pairs by flipping 4 times...");
+						// log("    Starting to find parallel edge pairs by flipping 4 times..."); // Commented out
 						for (int peIndex = 0; peIndex < 4; peIndex++)
 						{
 							try {
-								log("      Flip iteration " + std::to_string(peIndex+1));
+								// log("      Flip iteration " + std::to_string(peIndex+1)); // Commented out
 								
 								ne1 = mesh->flip_e(nf1, ne1, ev1);
 								if (!ne1) {
@@ -1772,11 +1582,10 @@ namespace HMeshLib
 									break;
 								}
 								
-								log("      After flipping: ne1=" + std::to_string(ne1->id()) + ", ne2=" + std::to_string(ne2->id()) +
-									", ev1=" + std::to_string(ev1->id()) + ", ev2=" + std::to_string(ev2->id()));
+								// log("      After flipping: ne1=" + std::to_string(ne1->id()) + ", ne2=" + std::to_string(ne2->id()) + ", ev1=" + std::to_string(ev1->id()) + ", ev2=" + std::to_string(ev2->id())); // Commented out
 
 								if (ne1->mark()) {
-									log("      Edge " + std::to_string(ne1->id()) + " already processed, skipping");
+									// log("      Edge " + std::to_string(ne1->id()) + " already processed, skipping"); // Commented out
 									continue;
 								}
 
@@ -1786,7 +1595,7 @@ namespace HMeshLib
 								parallel_es.push_back(pair_es);
 								parallelPairsFound++;
 								
-								log("      Found parallel edge pair: " + std::to_string(ne1->id()) + " and " + std::to_string(ne2->id()));
+								// log("      Found parallel edge pair: " + std::to_string(ne1->id()) + " and " + std::to_string(ne2->id())); // Commented out
 							}
 							catch(const std::exception& ex) {
 								log("      Exception during parallel edges search iteration " + std::to_string(peIndex+1) + ": " + std::string(ex.what()));

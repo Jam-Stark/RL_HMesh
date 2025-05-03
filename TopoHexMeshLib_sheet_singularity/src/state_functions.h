@@ -13,6 +13,7 @@
 #include "sheet_operation.h"
 #include "singularity_number.h"
 #include "topoMesh.h"
+#include "tools.h"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -307,6 +308,18 @@ class State {
                 }
             }
             return false;
+        }
+
+        // 新增：计算当前状态的平均雅可比值
+        double get_average_jacobian() const {
+            if (sheet_avg_scaled_jacobian.empty()) {
+                return 0.0; // 或者返回一个表示无效的值，例如 -1.0
+            }
+            double sum = 0.0;
+            for (double jacobian : sheet_avg_scaled_jacobian) {
+                sum += jacobian;
+            }
+            return sum / sheet_avg_scaled_jacobian.size();
         }
 
         void print() {
@@ -677,7 +690,7 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     std::cout << "  avg_jacobian: " << avg_jacobian << std::endl;
     
     float geometry_reward = 0.0f;
-    
+
     // 1. 边界和特征保护惩罚
     // 如果折叠了大量边界或特征边，给予惩罚
     if (boundary_ratio > 0.5) {
@@ -753,14 +766,15 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
         geometry_reward += quality_change * 15.0f;  // 增加网格总体质量变化的重要性
         std::cout << "  Quality change reward: " << (quality_change * 15.0f) << std::endl;
     }
-    
+
+
     // 组合基础奖励和几何奖励
     float total_reward = base_reward + geometry_reward;
-    
+
     std::cout << "Base reward: " << base_reward << std::endl;
     std::cout << "Geometry reward: " << geometry_reward << std::endl;
     std::cout << "Total reward: " << total_reward << std::endl;
-    
+
     return total_reward;
 }
 
