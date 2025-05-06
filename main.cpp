@@ -240,6 +240,11 @@ int main(int argc, char* argv[])
             tmesh.load_Qhex(mesh_name.c_str());
             //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
 
+            std::cout<< "boundary count by face: " << tmesh.count_boundary_byF() << std::endl;
+            std::cout<< "boundary count by edge: " << tmesh.count_boundary_byE() << std::endl;
+            std::cout<< "sharp edge count: " << tmesh.count_sharp_edges() << std::endl;
+            std::cout<< "corner count: " << tmesh.count_corner() << std::endl;
+
             // 使用正确的方法访问网格数据
             std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
             std::cout << "Edge count: " << tmesh.es.size() << std::endl;
@@ -276,10 +281,7 @@ int main(int argc, char* argv[])
             std::cout << "State calculation complete, current state:" << std::endl;
             state.print();
 
-            // std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
-            // std::cout << "Edge count: " << tmesh.es.size() << std::endl;
-            // std::cout << "Face count: " << tmesh.fs.size() << std::endl;
-            // std::cout << "Cell count: " << tmesh.hs.size() << std::endl;
+            std::cin.get(); // 等待用户输入，确保状态打印完成后再继续
 
             std::cout << "Generating singularity numbers..." << std::endl;
             get_singularity_num_op.generate_singularity_number(&tmesh);

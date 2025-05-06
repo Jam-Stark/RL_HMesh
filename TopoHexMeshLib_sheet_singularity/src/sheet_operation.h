@@ -82,6 +82,7 @@ namespace HMeshLib
 		/* get new info from each sheet*/
 		double get_sheet_on_boundary_ratio(std::vector<E*> sheet);
 		double get_sheet_on_feature_ratio(std::vector<E*> sheet);
+		
 		bool sheet_endpoints_are_corners_or_boundary(std::vector<E*> sheet);
 		int get_sheet_adjacent_feature_edges_count(std::vector<E*> sheet);
 
@@ -100,7 +101,11 @@ namespace HMeshLib
 		// 计算mesh的各项属性(点 边 面数量 & 几何 & 拓扑各项信息),方便对比算法处理后的mesh和原mesh的对比,检验算法的效果
 		MeshFeatures get_mesh_features();
 
+		int get_sheet_valence_along_path(const std::vector<E*>& sheet);
 
+        double get_distance_to_boundary(const std::vector<E*>& sheet);
+		double get_distance_to_feature(const std::vector<E*>& sheet);
+		
 	private:
 		M* mesh;
 		std::string filename;
@@ -2003,50 +2008,235 @@ namespace HMeshLib
 		}
 	}
 
-    template <typename M>
-    inline double sheet_operation<M>::get_sheet_on_boundary_ratio(std::vector<E *> sheet)
-    {
-        int is_boundary_count = 0;
-
+	template <typename M>
+	inline double sheet_operation<M>::get_sheet_on_boundary_ratio(std::vector<E *> sheet)
+	{
+		// 检查输入的 sheet 是否为空
+		if (sheet.empty()) {
+			// 如果 sheet 为空，边界比例为 0
+			return 0.0;
+		}
+	
+		int is_boundary_count = 0;
+		int processed_count = 0; // 用于统计实际处理的有效边数
+	
+		// 遍历 sheet 中的所有边
 		for (int i = 0; i < sheet.size(); i++)
 		{
 			E *e = sheet[i];
+	
+			// 跳过空指针，提高健壮性
+			if (!e) {
+				continue;
+			}
+			processed_count++; // 计数有效的边
+	
+			// 检查边的 boundary 标志
 			if (e->boundary())
 			{
 				is_boundary_count++;
 			}
 		}
-		double ratio = is_boundary_count / sheet.size();
-		log("Sheet " + std::to_string(sheet[0]->id()) + " on boundary ratio: " + std::to_string(ratio) + ", Boundary edges: " + std::to_string(is_boundary_count) + ", Total edges: " + std::to_string(sheet.size()));
-		return ratio;
-    }
-
-    template <typename M>
-    inline double sheet_operation<M>::get_sheet_on_feature_ratio(std::vector<E *> sheet)
-    {
-        int is_feature_count = 0;
-		for (int i = 0; i < sheet.size(); i++)
-		{
-			E *e = sheet[i];
-			if (e->sharp())
-			{
-				is_feature_count++;
-			}
+	
+		// 计算比例，使用实际处理的边数作为分母
+		if (processed_count == 0) {
+			 // 如果没有处理任何有效的边（例如 sheet 只包含空指针）
+			return 0.0;
 		}
-		double ratio = is_feature_count / sheet.size();
-		log("Sheet " + std::to_string(sheet[0]->id()) + " on feature ratio: " + std::to_string(ratio) + ", Feature edges: " + std::to_string(is_feature_count) + ", Total edges: " + std::to_string(sheet.size()));
+	
+		// 确保进行浮点数除法
+		double ratio = static_cast<double>(is_boundary_count) / static_cast<double>(processed_count);
 		return ratio;
-    }
-    template <typename M>
-    inline bool sheet_operation<M>::sheet_endpoints_are_corners_or_boundary(std::vector<E *> sheet)
+	}
+
+	template <typename M>
+    // Add implementation if it's not already there, or modify existing one
+    inline double sheet_operation<M>::get_sheet_on_feature_ratio(std::vector<E*> sheet)
     {
-        return false;
-    }
-    template <typename M>
-    inline int sheet_operation<M>::get_sheet_adjacent_feature_edges_count(std::vector<E *> sheet)
-    {
-        return 0;
-    }
+        if (sheet.empty()) {
+            log("get_sheet_on_feature_ratio: Warning - Input sheet is empty.");
+            return 0.0;
+        }
+
+        // Assuming the first edge's sheet ID represents the whole sheet for logging
+        int representative_sheet_id = sheet[0] ? sheet[0]->sheet() : -1;
+        log("get_sheet_on_feature_ratio: Calculating for Sheet ID (representative) " + std::to_string(representative_sheet_id) + " with " + std::to_string(sheet.size()) + " edges.");
+
+        int is_feature_count = 0;
+        int processed_count = 0;
+        for (int i = 0; i < sheet.size(); i++)
+        {
+            E* e = sheet[i];
+            if (!e) {
+                log("  get_sheet_on_feature_ratio: Skipping null edge pointer at index " + std::to_string(i));
+                continue;
+            }
+            processed_count++;
+            int sharp_value = e->sharp(); // Read the value once
+
+            // Log every edge's sharp value for debugging
+            log("  get_sheet_on_feature_ratio: Checking Edge ID " + std::to_string(e->id()) + ", sharp() = " + std::to_string(sharp_value));
+
+            // The check should likely be for non-zero sharp value
+            if (sharp_value > 0) // Check if sharp value indicates it's a feature
+            {
+                is_feature_count++;
+                log("    -> Edge ID " + std::to_string(e->id()) + " counted as feature.");
+            }
+        }
+
+        if (processed_count == 0) {
+             log("get_sheet_on_feature_ratio: Warning - No valid edges processed in the sheet.");
+             return 0.0;
+        }
+
+        // Ensure floating point division
+        double ratio = static_cast<double>(is_feature_count) / static_cast<double>(processed_count);
+        log("get_sheet_on_feature_ratio: Calculation complete for Sheet ID " + std::to_string(representative_sheet_id) + ". Feature count = " + std::to_string(is_feature_count) + ", Processed edges = " + std::to_string(processed_count) + ", Ratio = " + std::to_string(ratio));
+
+        return ratio;
+    	}
+
+		template <typename M>
+		bool sheet_operation<M>::sheet_endpoints_are_corners_or_boundary(std::vector<E*> sheet)
+		{
+			// 检查 mesh 指针和空 sheet
+			if (!mesh || sheet.empty()) {
+				// log("Warning: sheet_endpoints_are_corners_or_boundary called with empty sheet or null mesh.");
+				return false;
+			}
+		
+			std::map<int, int> vertex_counts;
+			std::set<int> sheet_vertex_ids;
+		
+			// 1. 统计顶点出现次数
+			for (E* e : sheet) {
+				// 跳过无效边
+				if (!e || e->vs.size() != 2) continue;
+				for (int vid : e->vs) {
+					// 可以在这里检查 vid 的有效性，但 set 会自动处理重复
+					sheet_vertex_ids.insert(vid);
+					vertex_counts[vid]++;
+				}
+			}
+		
+			// 2. 查找端点顶点 (计数为1的顶点)
+			std::vector<V*> endpoint_vertices;
+			for (int vid : sheet_vertex_ids) {
+				// 使用 find 避免自动创建条目
+				auto it = vertex_counts.find(vid);
+				if (it != vertex_counts.end() && it->second == 1) {
+					V* v = mesh->idVertices(vid);
+					// 检查 idVertices 是否返回有效指针
+					if (v) {
+						endpoint_vertices.push_back(v);
+					} else {
+						// log("Warning: Could not find vertex with ID " + std::to_string(vid) + " while finding sheet endpoints.");
+					}
+				}
+			}
+		
+			// 3. 判断端点情况
+			//    通常非闭合 sheet 有 2 个端点
+			//    闭合 sheet 或其他复杂情况 (如多段、断裂) 端点数不为 2
+			if (endpoint_vertices.size() != 2) {
+				 // 可以选择性地检查是否为闭环 (所有顶点计数都为2)
+				// bool is_loop = true;
+				// if (!sheet_vertex_ids.empty()) { // 只有在有顶点时才检查
+				//     for(int vid : sheet_vertex_ids) {
+				//         auto it = vertex_counts.find(vid);
+				//         if(it == vertex_counts.end() || it->second != 2) { // 如果顶点不存在或计数不为2
+				//             is_loop = false;
+				//             break;
+				//         }
+				//     }
+				// } else {
+				//     is_loop = false; // 空sheet不是闭环
+				// }
+				// if(is_loop) {
+				//      log("Sheet appears to be a loop. Returning false for endpoint check.");
+				// } else {
+				//     log("Warning: Found " + std::to_string(endpoint_vertices.size()) + " endpoints (expected 2). Returning false.");
+				// }
+				return false; // 对于非标准端点数的情况，保守返回 false
+			}
+		
+			// 4. 检查两个端点的属性
+			bool endpoint1_special = false;
+			bool endpoint2_special = false;
+		
+			// 检查 endpoint_vertices[0] 是否有效，然后检查其属性
+			V* ep0 = endpoint_vertices[0];
+			if (ep0) {
+				endpoint1_special = ep0->boundary() || ep0->corner() || (ep0->feature_vertex() != 0);
+				// log("Endpoint 1 (ID: " + std::to_string(ep0->id()) + ") Special: " + (endpoint1_special ? "Y":"N"));
+			}
+		
+			// 检查 endpoint_vertices[1] 是否有效，然后检查其属性
+			V* ep1 = endpoint_vertices[1];
+			if (ep1) {
+				 endpoint2_special = ep1->boundary() || ep1->corner() || (ep1->feature_vertex() != 0);
+				 // log("Endpoint 2 (ID: " + std::to_string(ep1->id()) + ") Special: " + (endpoint2_special ? "Y":"N"));
+			}
+		
+			// 如果两个端点指针都有效，则返回它们是否至少有一个是 special
+			// 如果有任何一个端点指针无效，则之前的检查已经返回false或在这个逻辑中保持false
+			return endpoint1_special || endpoint2_special;
+		}
+
+	// --- IMPLEMENTATION for get_sheet_adjacent_feature_edges_count ---
+	template <typename M>
+	int sheet_operation<M>::get_sheet_adjacent_feature_edges_count(std::vector<E*> sheet)
+        {
+             if (sheet.empty()) {
+                 log("Warning: get_sheet_adjacent_feature_edges_count called with empty sheet.");
+                 return 0;
+             }
+
+             std::set<int> sheet_edge_ids;
+             std::set<int> sheet_vertex_ids;
+             std::set<int> counted_feature_edge_ids; // Track adjacent feature edges already counted
+             int total_adjacent_feature_count = 0;
+
+             // Populate sets of edge and vertex IDs belonging to the sheet
+             for (E* e : sheet) {
+                 if (!e || e->vs.size() != 2) continue;
+                 sheet_edge_ids.insert(e->id());
+                 sheet_vertex_ids.insert(e->vs[0]);
+                 sheet_vertex_ids.insert(e->vs[1]);
+             }
+
+             // Iterate through vertices belonging to the sheet
+             for (int vid : sheet_vertex_ids) {
+                 V* v = mesh->idVertices(vid);
+                 if (!v) continue; // Skip if vertex doesn't exist
+
+                 // Iterate through edges neighboring this vertex
+                 for (int neighbor_eid : v->neighbor_es) {
+                     // Skip if the neighboring edge is part of the sheet itself
+                     if (sheet_edge_ids.count(neighbor_eid)) {
+                         continue;
+                     }
+
+                     // Skip if this adjacent feature edge has already been counted
+                     if (counted_feature_edge_ids.count(neighbor_eid)) {
+                         continue;
+                     }
+
+                     E* neighbor_e = mesh->idEdges(neighbor_eid);
+                     if (!neighbor_e) continue; // Skip if edge doesn't exist
+
+                     // Check if the neighboring edge is sharp/feature
+                     if (neighbor_e->sharp() > 0) { // Assuming sharp > 0 means it's a feature edge
+                         total_adjacent_feature_count++;
+                         counted_feature_edge_ids.insert(neighbor_eid); // Mark as counted
+                         log("Adjacent feature edge found: ID " + std::to_string(neighbor_e->id()) + " connected to sheet vertex ID " + std::to_string(vid));
+                     }
+                 }
+             }
+             log("Total adjacent feature edges count for sheet: " + std::to_string(total_adjacent_feature_count));
+             return total_adjacent_feature_count;
+        }
     template <typename M>
     inline double sheet_operation<M>::get_sheet_curvature_metric(std::vector<E *> sheet)
     {
@@ -2386,5 +2576,297 @@ namespace HMeshLib
             log("Unknown exception occurred when computing scaled Jacobian");
             return {0.0, 0.0};
         }
+    }
+	template <typename M>
+	inline int sheet_operation<M>::get_sheet_valence_along_path(const std::vector<E *> &sheet)
+	{
+		// 处理空 sheet 输入
+		if (sheet.empty()) {
+			return 0;
+		}
+	
+		// --- 1. 识别端点顶点 ---
+		std::map<int, int> vertex_counts;
+		std::set<int> sheet_vertex_ids;
+		std::set<int> endpoint_ids;
+		std::set<int> sheet_edge_ids;
+		int current_sheet_id = -1; // 用于比较其他边的 sheet ID
+	
+		for (E* e : sheet) {
+			// 跳过无效边（空指针或顶点数不为2）
+			if (!e || e->vs.size() != 2) {
+				continue;
+			}
+			sheet_edge_ids.insert(e->id());
+			// 获取 sheet ID (从第一个有效边获取)
+			if(current_sheet_id == -1) current_sheet_id = e->sheet();
+	
+			for (int vid : e->vs) {
+				sheet_vertex_ids.insert(vid);
+				vertex_counts[vid]++;
+			}
+		}
+	
+		// 如果 sheet 中全是无效边，直接返回 0
+		if (sheet_vertex_ids.empty()) {
+			return 0;
+		}
+		// 如果无法确定 sheet ID (例如 sheet 中所有边 sheet() <= 0)，后面 is_other_sheet 会失效
+		// 但基于 is_feature 的计数仍然有效
+	
+		for (int vid : sheet_vertex_ids) {
+			// 使用 find 避免在 map 中自动创建不存在的 key
+			auto it = vertex_counts.find(vid);
+			// 只有在 map 中找到且计数为 1 的才是端点
+			if (it != vertex_counts.end() && it->second == 1) {
+				endpoint_ids.insert(vid);
+			}
+		}
+	
+		// --- 2. 统计连接数 ---
+		int valence_count = 0;
+		std::set<int> counted_connecting_edges; // 避免重复计数
+	
+		for (int vid : sheet_vertex_ids) {
+			// 跳过端点
+			if (endpoint_ids.count(vid)) {
+				continue;
+			}
+	
+			V* v = mesh->idVertices(vid);
+			// 跳过无效顶点指针
+			if (!v) {
+				continue;
+			}
+	
+			// 遍历顶点的邻接边
+			for (int neighbor_eid : v->neighbor_es) {
+				// 跳过属于当前 sheet 的边
+				if (sheet_edge_ids.count(neighbor_eid)) {
+					continue;
+				}
+				// 跳过已计数的连接边
+				if (counted_connecting_edges.count(neighbor_eid)) {
+					continue;
+				}
+	
+				E* neighbor_e = mesh->idEdges(neighbor_eid);
+				// 跳过无效邻接边指针
+				if (!neighbor_e){
+					continue;
+				}
+	
+				// 检查邻接边是否是特征边或属于其他 sheet
+				bool is_feature = neighbor_e->sharp() > 0;
+				bool is_other_sheet = (current_sheet_id > 0) && // 仅当当前 sheet ID 有效时才比较
+									(neighbor_e->sheet() > 0) &&
+									(neighbor_e->sheet() != current_sheet_id);
+	
+				if (is_feature || is_other_sheet) {
+					valence_count++;
+					counted_connecting_edges.insert(neighbor_eid); // 标记为已计数
+				}
+			}
+		} // 结束遍历 sheet 顶点
+	
+		return valence_count;
+	}
+	template <typename M>
+	inline double sheet_operation<M>::get_distance_to_boundary(const std::vector<E *> &sheet)
+	{
+		// 检查 mesh 指针和空 sheet
+		if (!mesh || sheet.empty()) {
+			// 对于无效输入，返回一个表示“无限远”或错误的值
+			return std::numeric_limits<double>::max();
+		}
+	
+		std::set<int> sheet_vertex_ids;
+	
+		// 1. 收集 sheet 顶点，并检查 sheet 是否本身在边界上
+		for (E* e : sheet) {
+			// 跳过无效边 (空指针或顶点数不为2)
+			if (!e || e->vs.size() != 2) {
+				continue;
+			}
+			// 检查边的 boundary 标志
+			if (e->boundary()) {
+				return 0.0; // 如果 sheet 包含边界边，距离为 0
+			}
+			// 添加顶点到集合中
+			sheet_vertex_ids.insert(e->vs[0]);
+			sheet_vertex_ids.insert(e->vs[1]);
+		}
+	
+		// 如果 sheet 为空或只包含无效边
+		if (sheet_vertex_ids.empty()){
+			 return std::numeric_limits<double>::max();
+		}
+	
+	
+		// 2. 收集网格中所有的边界顶点
+		std::vector<V*> boundary_vertices;
+		// 使用 map 迭代器访问顶点
+		for (auto const& [id, v_ptr] : mesh->m_map_vertices) {
+			 V* v = v_ptr;
+			 // 跳过空指针顶点，并检查 boundary 标志
+			 if (v && v->boundary()) {
+				 boundary_vertices.push_back(v);
+			 }
+		}
+	
+		// 如果网格中没有边界顶点，返回“无限远”
+		if (boundary_vertices.empty()) {
+			return std::numeric_limits<double>::max();
+		}
+	
+		// 3. 计算 sheet 顶点到边界顶点的最小距离
+		double min_distance_sq = std::numeric_limits<double>::max();
+	
+		for (int sv_id : sheet_vertex_ids) {
+			V* sv = mesh->idVertices(sv_id);
+			// 跳过无效的 sheet 顶点指针
+			if (!sv){
+				 continue;
+			}
+			CPoint sp = sv->position();
+	
+			for (V* bv : boundary_vertices) {
+				// 跳过无效的边界顶点指针
+				if (!bv){
+					continue;
+				}
+				CPoint bp = bv->position();
+				CPoint diff = sp - bp;
+				double dist_sq = diff * diff; // 使用平方距离避免开方，提高效率
+				min_distance_sq = std::min(min_distance_sq, dist_sq);
+			}
+		}
+	
+		// 如果未能计算出任何有效距离（例如所有 sheet 顶点都无效）
+		if (min_distance_sq == std::numeric_limits<double>::max()) {
+			 return std::numeric_limits<double>::max();
+		}
+	
+		// 返回实际的最小距离
+		return std::sqrt(min_distance_sq);
+	}
+    template <typename M>
+    inline double sheet_operation<M>::get_distance_to_feature(const std::vector<E *> &sheet)
+    {
+		log("--- Entering get_distance_to_feature ---");
+		if (!mesh || sheet.empty()) {
+		   log("get_distance_to_feature: Error - Mesh pointer is null or input sheet is empty. Returning max distance.");
+           log("--- Exiting get_distance_to_feature ---");
+			return std::numeric_limits<double>::max();
+		}
+        // 假设 sheet 中的第一条有效边代表整个 sheet 的 ID
+        int representative_sheet_id = -1;
+        for(E* edge : sheet) {
+            if(edge) {
+                representative_sheet_id = edge->sheet();
+                break;
+            }
+        }
+        log("get_distance_to_feature: Processing sheet (representative ID: " + (representative_sheet_id > 0 ? std::to_string(representative_sheet_id) : "N/A") + ") with " + std::to_string(sheet.size()) + " edges.");
+
+		std::set<int> sheet_vertex_ids;
+		std::set<int> sheet_edge_ids;
+		bool sheet_has_feature = false;
+
+		// 1. Collect sheet elements and check if sheet itself has feature edges
+		log("  Step 1: Collecting sheet elements and checking for internal features...");
+		for (E* e : sheet) {
+			if (!e || e->vs.size() != 2) {
+                 log("    Skipping invalid edge (ID: " + (e ? std::to_string(e->id()) : "null") + ")");
+                 continue;
+            }
+			sheet_edge_ids.insert(e->id());
+			sheet_vertex_ids.insert(e->vs[0]);
+			sheet_vertex_ids.insert(e->vs[1]);
+			if (e->sharp() > 0) { // Assuming sharp > 0 indicates a feature edge
+				sheet_has_feature = true;
+				log("  Sheet edge " + std::to_string(e->id()) + " is a feature edge. Distance = 0.0");
+                log("--- Exiting get_distance_to_feature ---");
+				return 0.0; // Sheet contains feature edge, distance is 0
+			}
+		}
+		log("  Collected " + std::to_string(sheet_vertex_ids.size()) + " unique vertices and " + std::to_string(sheet_edge_ids.size()) + " edges. Sheet has no internal feature edges.");
+
+		// 2. Collect all vertices belonging to *other* sharp edges
+		log("  Step 2: Collecting vertices from *other* sharp edges in the mesh...");
+		std::set<int> feature_vertex_ids;
+		int total_edges = 0;
+		int sharp_edge_count = 0;
+        int other_sharp_edge_count = 0;
+		for(auto const& [id, e_ptr] : mesh->m_map_edges) {
+			E* e_all = e_ptr;
+            if(!e_all) continue;
+			total_edges++;
+			if (e_all->sharp() > 0) {
+				 sharp_edge_count++;
+				// Check if this sharp edge is NOT part of the input sheet
+				if (sheet_edge_ids.find(e_all->id()) == sheet_edge_ids.end()) {
+                    other_sharp_edge_count++;
+					 if(e_all->vs.size() == 2) {
+						 feature_vertex_ids.insert(e_all->vs[0]);
+						 feature_vertex_ids.insert(e_all->vs[1]);
+                         // log("    Adding vertices " + std::to_string(e_all->vs[0]) + ", " + std::to_string(e_all->vs[1]) + " from other sharp edge " + std::to_string(e_all->id())); // 可选日志
+					 } else {
+                         log("    Warning: Other sharp edge " + std::to_string(e_all->id()) + " has invalid vertex count: " + std::to_string(e_all->vs.size()));
+                     }
+				}
+			}
+		}
+		log("  Found " + std::to_string(feature_vertex_ids.size()) + " vertices belonging to " + std::to_string(other_sharp_edge_count) + " other sharp edges (Total sharp edges: " + std::to_string(sharp_edge_count) + ", Total edges: " + std::to_string(total_edges) + ").");
+
+		// If there are no other feature edges, return large value
+		if (feature_vertex_ids.empty()) {
+			 log("  No other feature edges found in the mesh. Returning max distance.");
+             log("--- Exiting get_distance_to_feature ---");
+			return std::numeric_limits<double>::max();
+		}
+
+		// 3. Calculate minimum distance
+		log("  Step 3: Calculating minimum distance between sheet vertices and feature vertices...");
+		double min_distance_sq = std::numeric_limits<double>::max();
+        int sheet_vertex_processed = 0;
+        int feature_vertex_compared = 0;
+
+		for (int sv_id : sheet_vertex_ids) {
+			V* sv = mesh->idVertices(sv_id);
+			if (!sv){
+                 log("    Warning: Cannot find sheet vertex ID " + std::to_string(sv_id) + ". Skipping.");
+                 continue;
+            }
+            sheet_vertex_processed++;
+			CPoint sp = sv->position();
+            // log("    Processing sheet vertex " + std::to_string(sv_id)); // 可选
+
+			for (int fv_id : feature_vertex_ids) {
+				V* fv = mesh->idVertices(fv_id);
+				if (!fv){
+                    log("    Warning: Cannot find feature vertex ID " + std::to_string(fv_id) + ". Skipping.");
+                    continue;
+                }
+                feature_vertex_compared++;
+				CPoint fp = fv->position();
+				CPoint diff = sp - fp;
+				double dist_sq = diff * diff;
+                // log("      Comparing with feature vertex " + std::to_string(fv_id) + ", distance_sq = " + std::to_string(dist_sq)); // 可选
+				min_distance_sq = std::min(min_distance_sq, dist_sq);
+			}
+		}
+        log("  Processed " + std::to_string(sheet_vertex_processed) + " sheet vertices, performed " + std::to_string(feature_vertex_compared) + " comparisons.");
+
+		if (min_distance_sq == std::numeric_limits<double>::max()) {
+			 log("  Warning: Could not calculate any valid distances. Returning max distance.");
+             log("--- Exiting get_distance_to_feature ---");
+			 return std::numeric_limits<double>::max();
+		}
+
+		double min_distance = std::sqrt(min_distance_sq);
+		log("get_distance_to_feature: Calculation complete. Min distance = " + std::to_string(min_distance));
+        log("--- Exiting get_distance_to_feature ---");
+		return min_distance;
     }
 }
