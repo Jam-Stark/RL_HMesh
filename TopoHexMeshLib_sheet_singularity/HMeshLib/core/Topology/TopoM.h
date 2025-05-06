@@ -249,11 +249,11 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V, E, F, H>::compute_features_and_corners(double sharp_threshold_degrees = 30.0)
 	{
-		topoMeshLog("--- Starting Feature and Corner Computation ---"); // 使用您选择的日志函数
+		//topoMeshLog("--- Starting Feature and Corner Computation ---"); // 使用您选择的日志函数
 	
 		// --- 1. Ensure necessary pre-computations are done ---
 		// Mark boundary first, as it affects sharpness criteria
-		// topoMeshLog("Step 1: Marking boundaries...");
+		// //topoMeshLog("Step 1: Marking boundaries...");
 		// this->mark_boundary(); // 确保已调用
 	
 		// // Compute face normals, needed for dihedral angles
@@ -282,7 +282,7 @@ namespace HMeshLib
 	
 	
 		// --- 3. Compute Corner Vertices ---
-		topoMeshLog("Step 5: Computing corner vertices (threshold >= 3 sharp edges)...");
+		//topoMeshLog("Step 5: Computing corner vertices (threshold >= 3 sharp edges)...");
 		int corner_count = 0;
 		for (auto it = this->vs.begin(); it != this->vs.end(); ++it)
 		{
@@ -312,14 +312,14 @@ namespace HMeshLib
 				v->corner() = false; // 确保非角点被明确标记为 false
 			}
 		}
-		topoMeshLog("Corner vertices computed. Found " + std::to_string(corner_count) + " corner vertices.");
-		topoMeshLog("--- Feature and Corner Computation Finished ---");
+		//topoMeshLog("Corner vertices computed. Found " + std::to_string(corner_count) + " corner vertices.");
+		//topoMeshLog("--- Feature and Corner Computation Finished ---");
 	}
 
 	template<typename V, typename E, typename F, typename H>
 	void topoM< V, E, F, H>::compute_sharp_edges(double threshold_degrees)
     {
-        topoMeshLog("compute_sharp_edges: Starting automatic sharp edge computation with threshold: " + std::to_string(threshold_degrees));
+        //topoMeshLog("compute_sharp_edges: Starting automatic sharp edge computation with threshold: " + std::to_string(threshold_degrees));
         int sharp_count = 0;
         int edge_processed_count = 0;
 
@@ -328,18 +328,18 @@ namespace HMeshLib
             edge_processed_count++;
             E* e = *eite;
             if (!e) {
-                topoMeshLog("  compute_sharp_edges: Skipping null edge pointer at index " + std::to_string(edge_processed_count -1));
+                //topoMeshLog("  compute_sharp_edges: Skipping null edge pointer at index " + std::to_string(edge_processed_count -1));
                 continue;
             }
-            // topoMeshLog("  compute_sharp_edges: Processing Edge ID " + std::to_string(e->id()));
+            // //topoMeshLog("  compute_sharp_edges: Processing Edge ID " + std::to_string(e->id()));
 
             // Ensure edge_angle has been computed (critical pre-requisite)
             // Check if total_angle seems reasonable (e.g., not default 0 if boundary)
             if (e->boundary() && e->total_angle() == 0.0) {
-                 topoMeshLog("    compute_sharp_edges: Warning - Edge " + std::to_string(e->id()) + " is boundary but total_angle is 0. Angle might not have been computed correctly. Recalculating...");
+                 //topoMeshLog("    compute_sharp_edges: Warning - Edge " + std::to_string(e->id()) + " is boundary but total_angle is 0. Angle might not have been computed correctly. Recalculating...");
                  edge_angle(e); // Attempt to calculate angle now
                  if(e->total_angle() == 0.0) { // Check again
-                     topoMeshLog("    compute_sharp_edges: Error - Failed to calculate angle for boundary edge " + std::to_string(e->id()) + ". Cannot determine sharpness.");
+                     //topoMeshLog("    compute_sharp_edges: Error - Failed to calculate angle for boundary edge " + std::to_string(e->id()) + ". Cannot determine sharpness.");
                      e->sharp() = 0; // Default to not sharp if angle calculation failed
                      continue;
                  }
@@ -348,41 +348,41 @@ namespace HMeshLib
 
             if (e->boundary())
             {
-                 // topoMeshLog("    compute_sharp_edges: Edge " + std::to_string(e->id()) + " is boundary. total_angle = " + std::to_string(e->total_angle()));
+                 // //topoMeshLog("    compute_sharp_edges: Edge " + std::to_string(e->id()) + " is boundary. total_angle = " + std::to_string(e->total_angle()));
                 double deviation = abs(e->total_angle() - 180.0);
                  // Clamp deviation for robustness, although angles should ideally be within [0, 360]
                  deviation = std::min(deviation, 180.0);
-                 // topoMeshLog("    compute_sharp_edges: Deviation from 180 = " + std::to_string(deviation));
+                 // //topoMeshLog("    compute_sharp_edges: Deviation from 180 = " + std::to_string(deviation));
 
                 if (deviation > threshold_degrees)
                 {
                     e->sharp() = 1;
                     sharp_count++;
-                    topoMeshLog("    compute_sharp_edges: Marked edge " + std::to_string(e->id()) + " as SHARP (deviation=" + std::to_string(deviation) + ")");
+                    //topoMeshLog("    compute_sharp_edges: Marked edge " + std::to_string(e->id()) + " as SHARP (deviation=" + std::to_string(deviation) + ")");
                 }
                 else
                 {
                     e->sharp() = 0;
-                    // topoMeshLog("    compute_sharp_edges: Marked edge " + std::to_string(e->id()) + " as NOT sharp.");
+                    // //topoMeshLog("    compute_sharp_edges: Marked edge " + std::to_string(e->id()) + " as NOT sharp.");
                 }
             }
             else // Internal Edge
             {
-                // topoMeshLog("    compute_sharp_edges: Edge " + std::to_string(e->id()) + " is internal.");
+                // //topoMeshLog("    compute_sharp_edges: Edge " + std::to_string(e->id()) + " is internal.");
                 // Current logic: Internal edges are not marked sharp based on dihedral angle alone
                  e->sharp() = 0;
-                 // topoMeshLog("    compute_sharp_edges: Marked edge " + std::to_string(e->id()) + " as NOT sharp (internal).");
+                 // //topoMeshLog("    compute_sharp_edges: Marked edge " + std::to_string(e->id()) + " as NOT sharp (internal).");
 
                 // --- Optional: Uncomment below to mark internal edges based on 360 deviation ---
                 /*
                 double deviation = abs(e->total_angle() - 360.0);
                 if (deviation > 180.0) deviation = 360.0 - deviation; // Handle wrap-around
                 deviation = std::min(deviation, 180.0);
-                topoMeshLog("      compute_sharp_edges: Internal edge deviation from 360 = " + std::to_string(deviation));
+                //topoMeshLog("      compute_sharp_edges: Internal edge deviation from 360 = " + std::to_string(deviation));
                 if (deviation > threshold_degrees) {
                     e->sharp() = 1; // Or a different value for internal sharp?
                     sharp_count++;
-                    topoMeshLog("      compute_sharp_edges: Marked internal edge " + std::to_string(e->id()) + " as SHARP (deviation=" + std::to_string(deviation) + ")");
+                    //topoMeshLog("      compute_sharp_edges: Marked internal edge " + std::to_string(e->id()) + " as SHARP (deviation=" + std::to_string(deviation) + ")");
                 } else {
                     e->sharp() = 0;
                 }
@@ -390,41 +390,41 @@ namespace HMeshLib
                 // --- End Optional ---
             }
         } // End edge loop
-        topoMeshLog("compute_sharp_edges: Sharp edge computation finished. Processed " + std::to_string(edge_processed_count) + " edges. Marked " + std::to_string(sharp_count) + " edges as sharp.");
+        //topoMeshLog("compute_sharp_edges: Sharp edge computation finished. Processed " + std::to_string(edge_processed_count) + " edges. Marked " + std::to_string(sharp_count) + " edges as sharp.");
     }
 	template<typename V, typename E, typename F, typename H>
 	double topoM< V, E, F, H>::vector_angle(CPoint a, CPoint b)
     {
-        // topoMeshLog("  vector_angle: Input a(" + std::to_string(a[0]) + "," + std::to_string(a[1]) + "," + std::to_string(a[2]) + ")");
-        // topoMeshLog("  vector_angle: Input b(" + std::to_string(b[0]) + "," + std::to_string(b[1]) + "," + std::to_string(b[2]) + ")");
+        // //topoMeshLog("  vector_angle: Input a(" + std::to_string(a[0]) + "," + std::to_string(a[1]) + "," + std::to_string(a[2]) + ")");
+        // //topoMeshLog("  vector_angle: Input b(" + std::to_string(b[0]) + "," + std::to_string(b[1]) + "," + std::to_string(b[2]) + ")");
 
         double norm_a = a.norm();
         double norm_b = b.norm();
-        // topoMeshLog("  vector_angle: norm_a = " + std::to_string(norm_a) + ", norm_b = " + std::to_string(norm_b));
+        // //topoMeshLog("  vector_angle: norm_a = " + std::to_string(norm_a) + ", norm_b = " + std::to_string(norm_b));
 
         if (norm_a < 1e-10 || norm_b < 1e-10) {
-             topoMeshLog("  vector_angle: Warning - Zero vector detected. Returning 0.0");
+             //topoMeshLog("  vector_angle: Warning - Zero vector detected. Returning 0.0");
              return 0.0;
         }
 
         CPoint norm_vec_a = a / norm_a;
         CPoint norm_vec_b = b / norm_b;
         double temp = norm_vec_a * norm_vec_b;
-        // topoMeshLog("  vector_angle: Dot product (before clamp) = " + std::to_string(temp));
+        // //topoMeshLog("  vector_angle: Dot product (before clamp) = " + std::to_string(temp));
 
         temp = std::max(-1.0, std::min(1.0, temp));
-        // topoMeshLog("  vector_angle: Dot product (after clamp) = " + std::to_string(temp));
+        // //topoMeshLog("  vector_angle: Dot product (after clamp) = " + std::to_string(temp));
 
         double angle_rad = acos(temp);
-        // topoMeshLog("  vector_angle: Angle (radians) = " + std::to_string(angle_rad));
+        // //topoMeshLog("  vector_angle: Angle (radians) = " + std::to_string(angle_rad));
 
         if (!std::isfinite(angle_rad)) {
-            topoMeshLog("  vector_angle: Warning - Invalid angle from acos. Returning 0.0");
+            //topoMeshLog("  vector_angle: Warning - Invalid angle from acos. Returning 0.0");
             return 0.0;
         }
 
         double angle_deg = angle_rad / M_PI * 180.0;
-        // topoMeshLog("  vector_angle: Angle (degrees) = " + std::to_string(angle_deg));
+        // //topoMeshLog("  vector_angle: Angle (degrees) = " + std::to_string(angle_deg));
         return angle_deg;
     }
 
@@ -432,15 +432,15 @@ namespace HMeshLib
     void topoM< V, E, F, H>::edge_angle(E* e)
     {
         if (!e) {
-            topoMeshLog("edge_angle: Error - Input edge pointer is null.");
+            //topoMeshLog("edge_angle: Error - Input edge pointer is null.");
             return;
         }
-        topoMeshLog("edge_angle: Calculating for Edge ID " + std::to_string(e->id()) + ", Boundary: " + (e->boundary() ? "Yes" : "No"));
+        //topoMeshLog("edge_angle: Calculating for Edge ID " + std::to_string(e->id()) + ", Boundary: " + (e->boundary() ? "Yes" : "No"));
 
         // Reset angle calculation for this edge
         e->total_angle() = 0.0;
         e->ave_angle() = 0.0;
-        // topoMeshLog("  edge_angle: Angles reset for Edge " + std::to_string(e->id()));
+        // //topoMeshLog("  edge_angle: Angles reset for Edge " + std::to_string(e->id()));
 
         if (!e->boundary())
         {
@@ -449,49 +449,49 @@ namespace HMeshLib
             // Calculate average based on actual neighbors, handle division by zero
             size_t neighbor_count = e->neighbor_hs.size();
             e->ave_angle() = (neighbor_count > 0) ? (360.0 / neighbor_count) : 90.0; // Default to 90 if no hex neighbors?
-            topoMeshLog("  edge_angle: Internal Edge " + std::to_string(e->id()) + ". Set total_angle=360.0, ave_angle=" + std::to_string(e->ave_angle()));
+            //topoMeshLog("  edge_angle: Internal Edge " + std::to_string(e->id()) + ". Set total_angle=360.0, ave_angle=" + std::to_string(e->ave_angle()));
             return;
         }
 
         // Boundary edge calculation
         double total_angle_sum = 0.0;
         int valid_hex_count = 0;
-        topoMeshLog("  edge_angle: Boundary Edge " + std::to_string(e->id()) + ". Processing " + std::to_string(e->neighbor_hs.size()) + " neighboring hexes.");
+        //topoMeshLog("  edge_angle: Boundary Edge " + std::to_string(e->id()) + ". Processing " + std::to_string(e->neighbor_hs.size()) + " neighboring hexes.");
 
         for (int ehIndex = 0; ehIndex < e->neighbor_hs.size(); ehIndex++)
         {
             int hex_id = e->neighbor_hs[ehIndex];
             H* eh = idHexs(hex_id);
             if (!eh) {
-                topoMeshLog("    edge_angle: Warning - Could not find Hex ID " + std::to_string(hex_id) + " for Edge " + std::to_string(e->id()));
+                //topoMeshLog("    edge_angle: Warning - Could not find Hex ID " + std::to_string(hex_id) + " for Edge " + std::to_string(e->id()));
                 continue;
             }
-            topoMeshLog("    edge_angle: Processing Hex ID " + std::to_string(eh->id()));
+            //topoMeshLog("    edge_angle: Processing Hex ID " + std::to_string(eh->id()));
 
             // Get adjacent faces within this hex
             std::vector<F*> ehfs = e_adj_f_in_hex(eh, e);
             if (ehfs.size() != 2) {
-                topoMeshLog("    edge_angle: Warning - Expected 2 adjacent faces in Hex " + std::to_string(eh->id()) + " for Edge " + std::to_string(e->id()) + ", found " + std::to_string(ehfs.size()) + ". Skipping hex.");
+                //topoMeshLog("    edge_angle: Warning - Expected 2 adjacent faces in Hex " + std::to_string(eh->id()) + " for Edge " + std::to_string(e->id()) + ", found " + std::to_string(ehfs.size()) + ". Skipping hex.");
                 continue;
             }
 
             F* f1 = ehfs[0];
             F* f2 = ehfs[1];
             if (!f1 || !f2) {
-                 topoMeshLog("    edge_angle: Warning - Null face pointer found in Hex " + std::to_string(eh->id()) + " for Edge " + std::to_string(e->id()) + ". Skipping hex.");
+                 //topoMeshLog("    edge_angle: Warning - Null face pointer found in Hex " + std::to_string(eh->id()) + " for Edge " + std::to_string(e->id()) + ". Skipping hex.");
                  continue;
             }
-            topoMeshLog("    edge_angle: Adjacent faces: F" + std::to_string(f1->id()) + " and F" + std::to_string(f2->id()));
+            //topoMeshLog("    edge_angle: Adjacent faces: F" + std::to_string(f1->id()) + " and F" + std::to_string(f2->id()));
 
             CPoint n1_raw = f1->normal();
             CPoint n2_raw = f2->normal();
             double n1_norm = n1_raw.norm();
             double n2_norm = n2_raw.norm();
-            topoMeshLog("      edge_angle: Raw normals - n1_norm=" + std::to_string(n1_norm) + ", n2_norm=" + std::to_string(n2_norm));
+            //topoMeshLog("      edge_angle: Raw normals - n1_norm=" + std::to_string(n1_norm) + ", n2_norm=" + std::to_string(n2_norm));
 
             // Ensure normals are valid before proceeding
             if (n1_norm < 1e-10 || n2_norm < 1e-10) {
-                topoMeshLog("      edge_angle: Warning - Invalid normal detected (norm < 1e-10). Skipping angle calculation for this hex.");
+                //topoMeshLog("      edge_angle: Warning - Invalid normal detected (norm < 1e-10). Skipping angle calculation for this hex.");
                 continue;
             }
 
@@ -502,35 +502,35 @@ namespace HMeshLib
             bool n1_flipped = false;
             bool n2_flipped = false;
             if (f1->neighbor_hs.empty()){
-                topoMeshLog("      edge_angle: Warning - Face " + std::to_string(f1->id()) + " has no hex neighbors.");
+                //topoMeshLog("      edge_angle: Warning - Face " + std::to_string(f1->id()) + " has no hex neighbors.");
                  continue; // Should not happen if it's adjacent to eh, indicates data inconsistency
             } else if (f1->neighbor_hs[0] != eh->id()) {
                 n1 = -n1;
                 n1_flipped = true;
             }
             if (f2->neighbor_hs.empty()){
-                topoMeshLog("      edge_angle: Warning - Face " + std::to_string(f2->id()) + " has no hex neighbors.");
+                //topoMeshLog("      edge_angle: Warning - Face " + std::to_string(f2->id()) + " has no hex neighbors.");
                  continue; // Should not happen if it's adjacent to eh
             } else if (f2->neighbor_hs[0] != eh->id()) {
                 n2 = -n2;
                 n2_flipped = true;
             }
-            topoMeshLog("      edge_angle: Orientation check - n1_flipped=" + std::string(n1_flipped ? "Yes" : "No") + ", n2_flipped=" + std::string(n2_flipped ? "Yes" : "No"));
+            //topoMeshLog("      edge_angle: Orientation check - n1_flipped=" + std::string(n1_flipped ? "Yes" : "No") + ", n2_flipped=" + std::string(n2_flipped ? "Yes" : "No"));
 
 
             double angle_between_normals = vector_angle(n1, n2); // vector_angle handles normalization now
-            topoMeshLog("      edge_angle: Angle between oriented normals = " + std::to_string(angle_between_normals) + " degrees.");
+            //topoMeshLog("      edge_angle: Angle between oriented normals = " + std::to_string(angle_between_normals) + " degrees.");
 
             // The angle *inside* the material is 180 - angle_between_normals
             double internal_angle = 180.0 - angle_between_normals;
 
             // Clamp internal angle to a reasonable range (e.g., 0 to 360, though typically < 360 for single hex)
             internal_angle = std::max(0.0, std::min(360.0, internal_angle));
-            topoMeshLog("      edge_angle: Calculated internal angle = " + std::to_string(internal_angle) + " degrees.");
+            //topoMeshLog("      edge_angle: Calculated internal angle = " + std::to_string(internal_angle) + " degrees.");
 
             // Check if calculated angle is finite
             if (!std::isfinite(internal_angle)) {
-                topoMeshLog("      edge_angle: Warning - Calculated internal angle is not finite. Skipping this hex.");
+                //topoMeshLog("      edge_angle: Warning - Calculated internal angle is not finite. Skipping this hex.");
                 continue;
             }
 
@@ -539,28 +539,28 @@ namespace HMeshLib
             if (eh->edgeIndex(e->id()) != -1) {
                  eh->edge_angle(e->id()) = internal_angle;
             } else {
-                 topoMeshLog("      edge_angle: Warning - Edge ID " + std::to_string(e->id()) + " not found in Hex ID " + std::to_string(eh->id()) + " edge list. Cannot store hex-specific angle.");
+                 //topoMeshLog("      edge_angle: Warning - Edge ID " + std::to_string(e->id()) + " not found in Hex ID " + std::to_string(eh->id()) + " edge list. Cannot store hex-specific angle.");
             }
 
             total_angle_sum += internal_angle;
             valid_hex_count++;
-            topoMeshLog("      edge_angle: Added angle to sum. Current sum = " + std::to_string(total_angle_sum) + ", valid hex count = " + std::to_string(valid_hex_count));
+            //topoMeshLog("      edge_angle: Added angle to sum. Current sum = " + std::to_string(total_angle_sum) + ", valid hex count = " + std::to_string(valid_hex_count));
         } // end loop over neighboring hexes
 
         if (valid_hex_count > 0) {
             // Final validation on total angle sum
             if (!std::isfinite(total_angle_sum) || total_angle_sum < 0) {
-                 topoMeshLog("  edge_angle: Warning - Final total_angle_sum (" + std::to_string(total_angle_sum) + ") is invalid for Edge " + std::to_string(e->id()) + ". Resetting to 180.0.");
+                 //topoMeshLog("  edge_angle: Warning - Final total_angle_sum (" + std::to_string(total_angle_sum) + ") is invalid for Edge " + std::to_string(e->id()) + ". Resetting to 180.0.");
                  total_angle_sum = 180.0; // Default boundary angle
             }
              e->total_angle() = total_angle_sum;
              e->ave_angle() = total_angle_sum / valid_hex_count;
         } else {
-             topoMeshLog("  edge_angle: Warning - No valid hex neighbors contributed angles for Boundary Edge " + std::to_string(e->id()) + ". Setting default angles.");
+             //topoMeshLog("  edge_angle: Warning - No valid hex neighbors contributed angles for Boundary Edge " + std::to_string(e->id()) + ". Setting default angles.");
              e->total_angle() = 180.0; // Default boundary angle
              e->ave_angle() = 90.0; // Default average
         }
-        topoMeshLog("  edge_angle: Final calculated angles for Edge " + std::to_string(e->id()) + ": total_angle=" + std::to_string(e->total_angle()) + ", ave_angle=" + std::to_string(e->ave_angle()));
+        //topoMeshLog("  edge_angle: Final calculated angles for Edge " + std::to_string(e->id()) + ": total_angle=" + std::to_string(e->total_angle()) + ", ave_angle=" + std::to_string(e->ave_angle()));
     }
 
 	template<typename V, typename E, typename F, typename H>
@@ -2094,17 +2094,17 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V, E, F, H>::revise_hex_face_normal(H* h)
 	{
-		// 首先获取日志函数，如果在HMeshLib命名空间中存在
-		auto logFunc = [](const std::string& msg) {
-			// 检查是否存在topoMeshLog函数
-			if (HMeshLib::getTopoMeshLog()) {
-				HMeshLib::topoMeshLog(msg);
-			}
-			// 检查是否存在sheet_operation日志函数
-			else if (HMeshLib::getSheetLog()) {
-				HMeshLib::log(msg);
-			}
-		};
+		// // 首先获取日志函数，如果在HMeshLib命名空间中存在
+		// auto logFunc = [](const std::string& msg) {
+		// 	// 检查是否存在//topoMeshLog函数
+		// 	if (HMeshLib::gettopoMeshLog()) {
+		// 		HMeshLib::topoMeshLog(msg);
+		// 	}
+		// 	// 检查是否存在sheet_operation日志函数
+		// 	else if (HMeshLib::getSheetLog()) {
+		// 		HMeshLib::log(msg);
+		// 	}
+		// };
 		
 		try {
 			//logFunc("In revise_hex_face_normal function.");
@@ -2113,170 +2113,170 @@ namespace HMeshLib
 			// print_edges_map();
 			// print_vertices_map();
 			// Inside revise_hex_face_normal(H* h)
-			logFunc("Entering revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
+			//logFunc("Entering revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
 			
 			// 先检查六面体的顶点是否都存在
-			logFunc("Checking hex vertices:");
-			for (int i = 0; i < h->vs.size(); i++) {
-				int vid = h->vs[i];
-				auto iter = m_map_vertices.find(vid);
-				if (iter == m_map_vertices.end()) {
-					logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " does not exist in vertex map!");
-				} else if (iter->second == nullptr) {
-					logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists in map but is nullptr!");
-				} else {
-					logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists and is valid.");
-				}
-			}
+			//logFunc("Checking hex vertices:");
+			// for (int i = 0; i < h->vs.size(); i++) {
+			// 	int vid = h->vs[i];
+			// 	auto iter = m_map_vertices.find(vid);
+			// 	if (iter == m_map_vertices.end()) {
+			// 		logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " does not exist in vertex map!");
+			// 	} else if (iter->second == nullptr) {
+			// 		logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists in map but is nullptr!");
+			// 	} else {
+			// 		logFunc("  Hex vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists and is valid.");
+			// 	}
+			// }
 			
 			// 打印与六面体相连的所有面的ID
-			logFunc("Connected faces:");
-			for (int i = 0; i < h->fs.size(); i++) {
-				logFunc("  Face ID: " + std::to_string(h->fs[i]) + " at index " + std::to_string(i));
-			}
+			// logFunc("Connected faces:");
+			// for (int i = 0; i < h->fs.size(); i++) {
+			// 	logFunc("  Face ID: " + std::to_string(h->fs[i]) + " at index " + std::to_string(i));
+			// }
 			
 			for (int fIndex = 0; fIndex < h->fs.size(); fIndex++)
 			{
 				int fid = h->fs[fIndex];
-				logFunc("  Processing face index " + std::to_string(fIndex) + ", face ID: " + std::to_string(fid));
+				//logFunc("  Processing face index " + std::to_string(fIndex) + ", face ID: " + std::to_string(fid));
 				F* f = idFaces(fid);
 				if (f == nullptr) {
-					logFunc("    Error: Face pointer is null!");
+					//logFunc("    Error: Face pointer is null!");
 					continue; // 跳过这个面
 				}
-				logFunc("    Face pointer retrieved successfully.");
+				//logFunc("    Face pointer retrieved successfully.");
 				
 				// 检查面的邻接六面体
 				if (f->neighbor_hs.empty()) {
-					logFunc("    Warning: Face " + std::to_string(f->id()) + " has no neighbors!");
+					//logFunc("    Warning: Face " + std::to_string(f->id()) + " has no neighbors!");
 					continue;
 				} else if (f->neighbor_hs[0] != h->id()) {
-					logFunc("    Skipping face " + std::to_string(f->id()) + " as h is not the first neighbor.");
+					//logFunc("    Skipping face " + std::to_string(f->id()) + " as h is not the first neighbor.");
 					continue;
 				}
 				
 				
 
 				// 检查面的顶点
-				logFunc("    Face vertices:");
-				for (int i = 0; i < f->vs.size(); i++) {
-					int vid = f->vs[i];
-					auto iter = m_map_vertices.find(vid);
-					if (iter == m_map_vertices.end()) {
-						logFunc("      Face vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " does not exist in vertex map!");
-					} else if (iter->second == nullptr) {
-						logFunc("      Face vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists in map but is nullptr!");
-					}
-				}
+				//logFunc("    Face vertices:");
+				// for (int i = 0; i < f->vs.size(); i++) {
+				// 	int vid = f->vs[i];
+				// 	auto iter = m_map_vertices.find(vid);
+				// 	if (iter == m_map_vertices.end()) {
+				// 		logFunc("      Face vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " does not exist in vertex map!");
+				// 	} else if (iter->second == nullptr) {
+				// 		logFunc("      Face vertex " + std::to_string(vid) + " at index " + std::to_string(i) + " exists in map but is nullptr!");
+				// 	}
+				// }
 				
 				// 检查draw_order中的顶点
-				logFunc("    Checking draw_order vertices for face index " + std::to_string(fIndex) + ":");
-				for (int i = 0; i < 6/*draw_order[fIndex].size()*/; i++) {
-					int orderIndex = h->draw_order[fIndex][i];
-					if (orderIndex < 0 || orderIndex >= h->vs.size()) {
-						logFunc("      draw_order[" + std::to_string(fIndex) + "][" + std::to_string(i) + 
-							"] = " + std::to_string(orderIndex) + " is out of bounds for hex vertices array!");
-						continue;
-					}
-					int vid = h->vs[orderIndex];
-					auto iter = m_map_vertices.find(vid);
-					if (iter == m_map_vertices.end()) {
-						logFunc("      draw_order vertex " + std::to_string(vid) + " does not exist in vertex map!");
-					} else if (iter->second == nullptr) {
-						logFunc("      draw_order vertex " + std::to_string(vid) + " exists in map but is nullptr!");
-					}
-				}
+				// logFunc("    Checking draw_order vertices for face index " + std::to_string(fIndex) + ":");
+				// for (int i = 0; i < 6/*draw_order[fIndex].size()*/; i++) {
+				// 	int orderIndex = h->draw_order[fIndex][i];
+				// 	if (orderIndex < 0 || orderIndex >= h->vs.size()) {
+				// 		logFunc("      draw_order[" + std::to_string(fIndex) + "][" + std::to_string(i) + 
+				// 			"] = " + std::to_string(orderIndex) + " is out of bounds for hex vertices array!");
+				// 		continue;
+				// 	}
+				// 	int vid = h->vs[orderIndex];
+				// 	auto iter = m_map_vertices.find(vid);
+				// 	if (iter == m_map_vertices.end()) {
+				// 		logFunc("      draw_order vertex " + std::to_string(vid) + " does not exist in vertex map!");
+				// 	} else if (iter->second == nullptr) {
+				// 		logFunc("      draw_order vertex " + std::to_string(vid) + " exists in map but is nullptr!");
+				// 	}
+				// }
 				
 				// 检查所有顶点是否存在
-				bool missingVertex = false;
-				for (int vIndex = 0; vIndex < 4; vIndex++) {
-					if (vIndex >= f->vs.size()) {
-						logFunc("    Error: Face vertex index " + std::to_string(vIndex) + 
-							" is out of bounds (face vs size: " + std::to_string(f->vs.size()) + ")");
-						missingVertex = true;
-						break;
-					}
+				// bool missingVertex = false;
+				// for (int vIndex = 0; vIndex < 4; vIndex++) {
+				// 	if (vIndex >= f->vs.size()) {
+				// 		logFunc("    Error: Face vertex index " + std::to_string(vIndex) + 
+				// 			" is out of bounds (face vs size: " + std::to_string(f->vs.size()) + ")");
+				// 		missingVertex = true;
+				// 		break;
+				// 	}
 					
-					int vID = f->vs[vIndex];
-					if (idVertices(vID) == nullptr) {
-						logFunc("    Error: Face " + std::to_string(f->id()) + " references non-existent vertex " + std::to_string(vID));
-						missingVertex = true;
-						break;
-					}
-				}
+				// 	int vID = f->vs[vIndex];
+				// 	if (idVertices(vID) == nullptr) {
+				// 		logFunc("    Error: Face " + std::to_string(f->id()) + " references non-existent vertex " + std::to_string(vID));
+				// 		missingVertex = true;
+				// 		break;
+				// 	}
+				// }
                 
-				if (missingVertex) {
-					logFunc("    Skipping face " + std::to_string(f->id()) + " due to missing vertex references");
-					continue;
-				}
+				// if (missingVertex) {
+				// 	logFunc("    Skipping face " + std::to_string(f->id()) + " due to missing vertex references");
+				// 	continue;
+				// }
 				
 				std::vector<V*> orderVs;
 				std::vector<V*> fVs;
 				
-				logFunc("    Processing face vertices...");
-				// 检查draw_order数组的边界
-				if (fIndex >= 6/*draw_order[fIndex].size()*/) {
-					logFunc("    Error: draw_order index " + std::to_string(fIndex) + 
-						" is out of bounds (size: " + std::to_string(4/*draw_order[fIndex].size()*/) + ")");
-					continue;
-				}
+				// logFunc("    Processing face vertices...");
+				// // 检查draw_order数组的边界
+				// if (fIndex >= 6/*draw_order[fIndex].size()*/) {
+				// 	logFunc("    Error: draw_order index " + std::to_string(fIndex) + 
+				// 		" is out of bounds (size: " + std::to_string(4/*draw_order[fIndex].size()*/) + ")");
+				// 	continue;
+				// }
 				
 				//revise normal
 				for (int vIndex = 0; vIndex < 4; vIndex++)
 				{
 					if (vIndex >= 4/*draw_order[fIndex].size()*/) {
-						logFunc("      Error: draw_order[" + std::to_string(fIndex) + "] index " + 
-							std::to_string(vIndex) + " is out of bounds (size: " + 
-							std::to_string(4/*draw_order[fIndex].size()*/) + ")");
+						// logFunc("      Error: draw_order[" + std::to_string(fIndex) + "] index " + 
+						// 	std::to_string(vIndex) + " is out of bounds (size: " + 
+						// 	std::to_string(4/*draw_order[fIndex].size()*/) + ")");
 						missingVertex = true;
 						break;
 					}
 					
 					if (h->draw_order[fIndex][vIndex] >= h->vs.size()) {
-						logFunc("      Error: draw_order value " + std::to_string(h->draw_order[fIndex][vIndex]) + 
-							" is out of bounds for hex vertices (size: " + std::to_string(h->vs.size()) + ")");
+						// logFunc("      Error: draw_order value " + std::to_string(h->draw_order[fIndex][vIndex]) + 
+						// 	" is out of bounds for hex vertices (size: " + std::to_string(h->vs.size()) + ")");
 						missingVertex = true;
 						break;
 					}
 					
 					int orderVid = h->vs[h->draw_order[fIndex][vIndex]];
-					logFunc("      Accessing ordered vertex ID: " + std::to_string(orderVid));
+					//logFunc("      Accessing ordered vertex ID: " + std::to_string(orderVid));
 					V* orderedV = idVertices(orderVid);
 					if (orderedV == nullptr) {
-						logFunc("        Error: Ordered vertex pointer is null!");
+						//logFunc("        Error: Ordered vertex pointer is null!");
 						missingVertex = true;
 						break;
 					} else {
-						logFunc("        Ordered vertex position: (" + std::to_string(orderedV->position()[0]) + ", " + 
-							std::to_string(orderedV->position()[1]) + ", " + 
-							std::to_string(orderedV->position()[2]) + ")");
+						// logFunc("        Ordered vertex position: (" + std::to_string(orderedV->position()[0]) + ", " + 
+						// 	std::to_string(orderedV->position()[1]) + ", " + 
+						// 	std::to_string(orderedV->position()[2]) + ")");
 						orderVs.push_back(orderedV);
 					}
 					
 					if (vIndex >= f->vs.size()) {
-						logFunc("      Error: Face vertex index " + std::to_string(vIndex) + 
-							" is out of bounds (face vs size: " + std::to_string(f->vs.size()) + ")");
+						// logFunc("      Error: Face vertex index " + std::to_string(vIndex) + 
+						// 	" is out of bounds (face vs size: " + std::to_string(f->vs.size()) + ")");
 						missingVertex = true;
 						break;
 					}
 					
 					int faceVid = f->vs[vIndex];
-					logFunc("      Accessing face vertex ID: " + std::to_string(faceVid));
+					//logFunc("      Accessing face vertex ID: " + std::to_string(faceVid));
 					V* faceV = idVertices(faceVid);
 					if (faceV == nullptr) {
-						logFunc("        Error: Face vertex pointer is null!");
+						//logFunc("        Error: Face vertex pointer is null!");
 						missingVertex = true;
 						break;
 					} else {
-						logFunc("        Face vertex position: (" + std::to_string(faceV->position()[0]) + ", " + 
-							std::to_string(faceV->position()[1]) + ", " + 
-							std::to_string(faceV->position()[2]) + ")");
+						// logFunc("        Face vertex position: (" + std::to_string(faceV->position()[0]) + ", " + 
+						// 	std::to_string(faceV->position()[1]) + ", " + 
+						// 	std::to_string(faceV->position()[2]) + ")");
 						fVs.push_back(faceV);
 					}
 				}
 				
 				if (missingVertex) {
-					logFunc("    Skipping face normal calculation due to missing vertices");
+					//logFunc("    Skipping face normal calculation due to missing vertices");
 					continue;
 				}
 				
@@ -2285,14 +2285,14 @@ namespace HMeshLib
 				CPoint fNormal;
 				for (int vIndex = 0; vIndex < 4; vIndex++)
 				{
-					logFunc("      Computing cross product for vertex index " + std::to_string(vIndex));
+					//logFunc("      Computing cross product for vertex index " + std::to_string(vIndex));
 					try {
 						CPoint v1 = orderVs[(vIndex+1)%4]->position() - orderVs[vIndex]->position();
 						CPoint v2 = orderVs[(vIndex+3)%4]->position() - orderVs[vIndex]->position();
 						CPoint crossProduct = v1 ^ v2;
-						logFunc("        Cross product result: (" + std::to_string(crossProduct[0]) + ", " + 
-							std::to_string(crossProduct[1]) + ", " + 
-							std::to_string(crossProduct[2]) + ")");
+						//logFunc("        Cross product result: (" + std::to_string(crossProduct[0]) + ", " + 
+							//std::to_string(crossProduct[1]) + ", " + 
+							//std::to_string(crossProduct[2]) + ")");
 						normal += crossProduct;
 						
 						v1 = fVs[(vIndex+1)%4]->position() - fVs[vIndex]->position();
@@ -2300,41 +2300,41 @@ namespace HMeshLib
 						crossProduct = v1 ^ v2;
 						fNormal += crossProduct;
 					} catch (const std::exception& e) {
-						logFunc("        Exception during cross product calculation: " + std::string(e.what()));
+						//logFunc("        Exception during cross product calculation: " + std::string(e.what()));
 						missingVertex = true;
 						break;
 					} catch (...) {
-						logFunc("        Unknown exception during cross product calculation");
+						//logFunc("        Unknown exception during cross product calculation");
 						missingVertex = true;
 						break;
 					}
 				}
 				
 				if (missingVertex) {
-					logFunc("    Skipping normal normalization due to calculation errors");
+					//logFunc("    Skipping normal normalization due to calculation errors");
 					continue;
 				}
 				
-				logFunc("    Normalizing normals...");
+				//logFunc("    Normalizing normals...");
 				normal = normal * 0.25;
 				double normalNorm = normal.norm();
 				if (normalNorm < 1e-10) {
-					logFunc("      Warning: Very small normal norm: " + std::to_string(normalNorm));
+					//logFunc("      Warning: Very small normal norm: " + std::to_string(normalNorm));
 					continue;
 				}
 				normal /= normalNorm;
-				logFunc("      Normalized normal: (" + std::to_string(normal[0]) + ", " + 
-					std::to_string(normal[1]) + ", " + std::to_string(normal[2]) + ")");
+				//logFunc("      Normalized normal: (" + std::to_string(normal[0]) + ", " + 
+					//std::to_string(normal[1]) + ", " + std::to_string(normal[2]) + ")");
 							
 				fNormal = fNormal * 0.25;
 				double fNormalNorm = fNormal.norm();
 				if (fNormalNorm < 1e-10) {
-					logFunc("      Warning: Very small face normal norm: " + std::to_string(fNormalNorm));
+					//logFunc("      Warning: Very small face normal norm: " + std::to_string(fNormalNorm));
 					continue;
 				}
 				fNormal /= fNormalNorm;
-				logFunc("      Normalized face normal: (" + std::to_string(fNormal[0]) + ", " + 
-					std::to_string(fNormal[1]) + ", " + std::to_string(fNormal[2]) + ")");
+				//logFunc("      Normalized face normal: (" + std::to_string(fNormal[0]) + ", " + 
+					//std::to_string(fNormal[1]) + ", " + std::to_string(fNormal[2]) + ")");
 				
 				f->normal() = normal;
 
@@ -2342,13 +2342,13 @@ namespace HMeshLib
 				theta = theta < -1 ? -1 : theta;
 				theta = theta > 1 ? 1 : theta;
 				double angle = acos(theta)/3.1415926*180;
-				logFunc("      Angle between normals: " + std::to_string(angle) + " degrees");
+				//logFunc("      Angle between normals: " + std::to_string(angle) + " degrees");
 
 				if (f->neighbor_hs[0] == h->id())
 				{
 					if (angle > 90)
 					{
-						logFunc("      Flipping face " + std::to_string(f->id()) + " normals (angle = " + std::to_string(angle) + ")");
+						//logFunc("      Flipping face " + std::to_string(f->id()) + " normals (angle = " + std::to_string(angle) + ")");
 						int tempId = f->vs[0];
 						f->vs[0] = f->vs[3];
 						f->vs[3] = tempId;
@@ -2362,12 +2362,12 @@ namespace HMeshLib
 						tempEId = f->es[1];
 						f->es[1] = f->es[2];
 						f->es[2] = tempEId;
-						logFunc("      Face vertices and edges reordered successfully");
+						//logFunc("      Face vertices and edges reordered successfully");
 					}
 				}
 			}
 			
-			logFunc("Exiting revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
+			//logFunc("Exiting revise_hex_face_normal for hex ID: " + std::to_string(h->id()));
 		}
 		catch (const std::exception& e) {
 			logFunc("在修正法线时发生异常: " + std::string(e.what()));
@@ -2383,7 +2383,7 @@ namespace HMeshLib
 		for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
 		{
 			H* h = *hite;
-			//if (!h->boundary()) continue;
+			if (!h->boundary()) continue;
 			revise_hex_face_normal(h);
 		}
 	}
@@ -2457,7 +2457,7 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_vertices_map() {
 		std::string logMsg = "Vertices Map (size=" + std::to_string(m_map_vertices.size()) + "):";
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			HMeshLib::topoMeshLog(logMsg);
 			
 			int count = 0;
@@ -2476,7 +2476,7 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_edges_map() {
 		std::string logMsg = "Edges Map (size=" + std::to_string(m_map_edges.size()) + "):";
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			HMeshLib::topoMeshLog(logMsg);
 			
 			int count = 0;
@@ -2495,7 +2495,7 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_faces_map() {
 		std::string logMsg = "Faces Map (size=" + std::to_string(m_map_faces.size()) + "):";
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			HMeshLib::topoMeshLog(logMsg);
 			
 			int count = 0;
@@ -2514,7 +2514,7 @@ namespace HMeshLib
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_hexs_map() {
 		std::string logMsg = "Hexs Map (size=" + std::to_string(m_map_hexs.size()) + "):";
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			HMeshLib::topoMeshLog(logMsg);
 			
 			int count = 0;
@@ -2532,7 +2532,7 @@ namespace HMeshLib
 	}
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_vertex(int id) {
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			auto it = m_map_vertices.find(id);
 			if (it != m_map_vertices.end()) {
 				V* v = it->second;
@@ -2554,7 +2554,7 @@ namespace HMeshLib
 	}
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_edge(int id) {
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			auto it = m_map_edges.find(id);
 			if (it != m_map_edges.end()) {
 				E* e = it->second;
@@ -2580,7 +2580,7 @@ namespace HMeshLib
 	}
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_face(int id) {
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			auto it = m_map_faces.find(id);
 			if (it != m_map_faces.end()) {
 				F* f = it->second;
@@ -2611,7 +2611,7 @@ namespace HMeshLib
 	}
 	template<typename V, typename E, typename F, typename H>
 	void topoM<V,E,F,H>::print_hex(int id) {
-		if (HMeshLib::getTopoMeshLog()) {
+		if (HMeshLib::gettopoMeshLog()) {
 			auto it = m_map_hexs.find(id);
 			if (it != m_map_hexs.end()) {
 				H* h = it->second;

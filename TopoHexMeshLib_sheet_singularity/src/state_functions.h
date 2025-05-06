@@ -447,8 +447,28 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
             //int valence_along_path = sheet_op.get_sheet_valence_along_path(sheet);
 
             //double dist_bound = sheet_op.get_distance_to_boundary(sheet); 
-            double dist_feat = sheet_op.get_distance_to_feature(sheet);   
+            double dist_feat;
+            if (feature_ratio >0) {
+                // Sheet 本身是特征，距离为 0
+                dist_feat = 0.0;
+            } else {
+                // Sheet 不是特征，调用修改后的距离计算函数
+                // 注意：现在 get_distance_to_feature 内部不再检查 sheet 是否 sharp
+                dist_feat = sheet_op.get_distance_to_feature(sheet);
+            } 
 
+            // if(feature_ratio==0 && dist_feat ==0){
+            //     std::cout << "sheet_id: " << sheet_id << " feature_ratio: " << feature_ratio << " dist_feat: " << dist_feat << std::endl;
+            //     // print sheet 中所有edge的is sharp情况
+            //     for (TE* edge : sheet) {
+            //         if (edge->sharp()) {
+            //             std::cout << "Edge ID: " << edge->id() << " is sharp." << std::endl;
+            //         } else {
+            //             std::cout << "Edge ID: " << edge->id() << " is not sharp." << std::endl;
+            //         }
+            //     }
+            //     std::cin.get(); // Wait for user input to pause
+            // }
 
             // 调用更新后的 add
             state.add(sheet_id, sheet_energy, boundary_ratio, feature_ratio,

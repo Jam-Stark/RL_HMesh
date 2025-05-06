@@ -281,7 +281,7 @@ int main(int argc, char* argv[])
             std::cout << "State calculation complete, current state:" << std::endl;
             state.print();
 
-            std::cin.get(); // 等待用户输入，确保状态打印完成后再继续
+            //std::cin.get(); // 等待用户输入，确保状态打印完成后再继续
 
             std::cout << "Generating singularity numbers..." << std::endl;
             get_singularity_num_op.generate_singularity_number(&tmesh);

@@ -1122,888 +1122,694 @@ namespace HMeshLib
 	template<typename M>
 	void sheet_operation<M>::edge_angle(E* e)
 	{
-		try {
-			log("Computing angle for edge ID: " + std::to_string(e->id()) + " (Unconditional calculation)");
-			
-			// 移除入口检查，总是执行计算
-			e->total_angle() = 0; // 重置 total_angle 以便累加
-
-			// 非边界边处理
-			if (!e->boundary())
-			{
-				e->total_angle() = 360.0;
-				e->ave_angle() = 90.0; // 一般为90度
-				log("Non-boundary edge " + std::to_string(e->id()) + " setting default total angle: 360.0");
-				return;
+		// 检查输入的边指针是否有效
+		if (!e) {
+			// log("edge_angle: Error - Input edge pointer is null."); // 注释掉
+			return;
+		}
+		// log("edge_angle: Calculating for Edge ID " + std::to_string(e->id()) + ", Boundary: " + (e->boundary() ? "Yes" : "No")); // 注释掉
+	
+		// 重置角度计算
+		e->total_angle() = 0.0;
+		e->ave_angle() = 0.0;
+		// log("  edge_angle: Angles reset for Edge " + std::to_string(e->id())); // 注释掉
+	
+		// 非边界边处理
+		if (!e->boundary())
+		{
+			e->total_angle() = 360.0;
+			// 根据实际邻接六面体数量计算平均角，避免除零
+			size_t neighbor_count = e->neighbor_hs.size();
+			e->ave_angle() = (neighbor_count > 0) ? (360.0 / neighbor_count) : 90.0; // 默认为90
+			// log("  edge_angle: Internal Edge " + std::to_string(e->id()) + ". Set total_angle=360.0, ave_angle=" + std::to_string(e->ave_angle())); // 注释掉
+			return;
+		}
+	
+		// 边界边计算
+		double total_angle_sum = 0.0;
+		int valid_angles_count = 0;
+		// log("  edge_angle: Boundary Edge " + std::to_string(e->id()) + ". Processing " + std::to_string(e->neighbor_hs.size()) + " neighboring hexes."); // 注释掉
+	
+		// 遍历相邻六面体
+		for (M::EHIterator ehite(mesh, e); !ehite.end(); ehite++)
+		{
+			H* eh = *ehite;
+			if (!eh) {
+				// log("    edge_angle: Warning - Could not find Hex for Edge " + std::to_string(e->id())); // 保留潜在的警告日志？或者也注释掉
+				continue;
 			}
-			
-			// 边界边需要计算
-			double total_angle = 0;
-			int valid_angles_count = 0;
-			
-			// 遍历相邻六面体
-			for (M::EHIterator ehite(mesh, e); !ehite.end(); ehite++)
-			{
-				H* eh = *ehite;
-				if (!eh) {
-					log("Warning: Null hexahedron found for edge " + std::to_string(e->id()));
+			// log("    edge_angle: Processing Hex ID " + std::to_string(eh->id())); // 注释掉
+	
+			try {
+				// 获取相邻面
+				std::vector<F*> ehfs = mesh->e_adj_f_in_hex(eh, e);
+				if (ehfs.size() != 2) { // 内部边可能有多个，但边界边在此六面体内应该只有2个相邻面
+					// log("    edge_angle: Warning - Expected 2 adjacent faces in Hex " + std::to_string(eh->id()) + " for Edge " + std::to_string(e->id()) + ", found " + std::to_string(ehfs.size()) + ". Skipping hex."); // 注释掉
 					continue;
 				}
-				
-				try {
-					// 获取相邻面
-					std::vector<F*> ehfs = mesh->e_adj_f_in_hex(eh, e);
-					if (ehfs.size() < 2) {
-						log("Warning: Edge " + std::to_string(e->id()) + " has insufficient adjacent faces in hex " + std::to_string(eh->id()) + ", faces: " + std::to_string(ehfs.size()));
-						continue;
-					}
-					
-					// 获取法向量
-					std::vector<CPoint> fn;
-					bool valid_normals = true;
-					
-					for (int fIndex = 0; fIndex < ehfs.size(); fIndex++)
-					{
-						F* f = ehfs[fIndex];
-						if (!f) {
-							log("Warning: Null face found for edge " + std::to_string(e->id()) + " in hex " + std::to_string(eh->id()));
-							valid_normals = false;
-							break;
-						}
-						
-						CPoint n = f->normal();
-						
-						// 检查法向量是否有效
-						if (fabs(n.norm()) < 1e-10) {
-							log("Warning: Face " + std::to_string(f->id()) + " has invalid normal (zero length)");
-							valid_normals = false;
-							break;
-						}
-						
-						if (f->neighbor_hs.empty()) {
-							log("Warning: Face " + std::to_string(f->id()) + " has empty neighbor_hs array");
-							valid_normals = false;
-							break;
-						}
-						
-						if (f->neighbor_hs[0] == eh->id())
-						{
-							fn.push_back(n);
-						}
-						else
-						{
-							fn.push_back(-n);
-						}
-					}
-					
-					if (!valid_normals || fn.size() < 2) {
-						log("Warning: Skipping angle calculation for edge " + std::to_string(e->id()) + " in hex " + std::to_string(eh->id()) + " due to invalid normals");
-						continue;
-					}
-					
-					// 计算角度
-					double angle_between = vector_angle(fn[0], fn[1]);
-					
-					// 检查角度是否有效
-					if (!std::isfinite(angle_between) || angle_between < 0 || angle_between > 180) {
-						log("Warning: Invalid angle between normals: " + std::to_string(angle_between) + " for edge " + std::to_string(e->id()));
-						continue;
-					}
-					
-					double temp_angle = 180 - angle_between;
-					
-					// 范围检查
-					if (temp_angle < 0) temp_angle = 0;
-					if (temp_angle > 180) temp_angle = 180;
-					
-					eh->edge_angle(e->id()) = temp_angle;
-					total_angle += temp_angle;
-					valid_angles_count++;
-					
-					// log("  Hex " + std::to_string(eh->id()) + " contributes angle: " + std::to_string(temp_angle) + " to edge " + std::to_string(e->id())); // Commented out
+	
+				F* f1 = ehfs[0];
+				F* f2 = ehfs[1];
+				if (!f1 || !f2) {
+					 // log("    edge_angle: Warning - Null face pointer found in Hex " + std::to_string(eh->id()) + " for Edge " + std::to_string(e->id()) + ". Skipping hex."); // 注释掉
+					 continue;
 				}
-				catch (const std::exception& ex) {
-					log("Exception in edge angle calculation for hex " + std::to_string(eh->id()) + ": " + std::string(ex.what()));
+				// log("    edge_angle: Adjacent faces: F" + std::to_string(f1->id()) + " and F" + std::to_string(f2->id())); // 注释掉
+	
+				CPoint n1_raw = f1->normal();
+				CPoint n2_raw = f2->normal();
+				double n1_norm = n1_raw.norm();
+				double n2_norm = n2_raw.norm();
+				// log("      edge_angle: Raw normals - n1_norm=" + std::to_string(n1_norm) + ", n2_norm=" + std::to_string(n2_norm)); // 注释掉
+	
+				// 检查法向量有效性
+				if (n1_norm < 1e-10 || n2_norm < 1e-10) {
+					// log("      edge_angle: Warning - Invalid normal detected (norm < 1e-10). Skipping angle calculation for this hex."); // 注释掉
+					continue;
 				}
-				catch (...) {
-					log("Unknown exception in edge angle calculation for hex " + std::to_string(eh->id()));
+	
+				CPoint n1 = n1_raw;
+				CPoint n2 = n2_raw;
+	
+				// 确定法线方向（指向六面体外部）
+				bool n1_flipped = false;
+				bool n2_flipped = false;
+				if (f1->neighbor_hs.empty()){ // 增加空检查
+					 // log("      edge_angle: Warning - Face " + std::to_string(f1->id()) + " has no hex neighbors."); // 注释掉
+					 continue;
+				} else if (f1->neighbor_hs[0] != eh->id()) { // 假设第一个邻居是当前六面体
+					n1 = -n1;
+					n1_flipped = true;
 				}
+				if (f2->neighbor_hs.empty()){ // 增加空检查
+					// log("      edge_angle: Warning - Face " + std::to_string(f2->id()) + " has no hex neighbors."); // 注释掉
+					 continue;
+				} else if (f2->neighbor_hs[0] != eh->id()) {
+					n2 = -n2;
+					n2_flipped = true;
+				}
+				// log("      edge_angle: Orientation check - n1_flipped=" + std::string(n1_flipped ? "Yes" : "No") + ", n2_flipped=" + std::string(n2_flipped ? "Yes" : "No")); // 注释掉
+	
+	
+				double angle_between_normals = vector_angle(n1, n2); // vector_angle 内部会处理归一化
+				// log("      edge_angle: Angle between oriented normals = " + std::to_string(angle_between_normals) + " degrees."); // 注释掉
+	
+				// 计算内部角度
+				double internal_angle = 180.0 - angle_between_normals;
+	
+				// 角度范围约束和有效性检查
+				internal_angle = std::max(0.0, std::min(180.0, internal_angle)); // 边界边的角度应在0-180
+				// log("      edge_angle: Calculated internal angle = " + std::to_string(internal_angle) + " degrees."); // 注释掉
+	
+				if (!std::isfinite(internal_angle)) {
+					// log("      edge_angle: Warning - Calculated internal angle is not finite. Skipping this hex."); // 注释掉
+					continue;
+				}
+	
+				// 存储六面体内的边角（如果需要的话）
+				// if (eh->edgeIndex(e->id()) != -1) {
+				//      eh->edge_angle(e->id()) = internal_angle;
+				// } else {
+				//      log("      edge_angle: Warning - Edge ID " + std::to_string(e->id()) + " not found in Hex ID " + std::to_string(eh->id()) + " edge list."); // 注释掉
+				// }
+	
+				total_angle_sum += internal_angle;
+				valid_angles_count++;
+				// log("      edge_angle: Added angle to sum. Current sum = " + std::to_string(total_angle_sum) + ", valid hex count = " + std::to_string(valid_angles_count)); // 注释掉
 			}
-			
-			// 检查是否有有效角度
-			if (valid_angles_count == 0) {
-				log("Warning: No valid angles calculated for edge " + std::to_string(e->id()) + ", setting default angle");
-				e->total_angle() = e->boundary() ? 180.0 : 360.0;
-				e->ave_angle() = e->boundary() ? 90.0 : 90.0;
-				return;
+			catch (const std::exception& ex) {
+				// log("Exception in edge angle calculation for hex " + std::to_string(eh->id()) + ": " + std::string(ex.what())); // 保留或注释掉异常日志
 			}
-			
-			// 验证最终的 total_angle
-			if (!std::isfinite(total_angle) || total_angle < 0 || total_angle > 720) {
-				log("Error: Invalid total angle calculated: " + std::to_string(total_angle) + " for edge " + std::to_string(e->id()) + ", resetting to default");
-				total_angle = e->boundary() ? 180.0 : 360.0;
+			catch (...) {
+				// log("Unknown exception in edge angle calculation for hex " + std::to_string(eh->id())); // 保留或注释掉异常日志
 			}
-			
-			e->total_angle() = total_angle;
-			e->ave_angle() = valid_angles_count > 0 ? (total_angle / valid_angles_count) : 90.0;
-			
-			log("Edge " + std::to_string(e->id()) + " final total angle: " + std::to_string(e->total_angle()) + 
-				", average angle: " + std::to_string(e->ave_angle()) + 
-				", based on " + std::to_string(valid_angles_count) + " valid measurements");
+		} // 结束遍历相邻六面体
+	
+		// 处理没有有效角度计算的情况
+		if (valid_angles_count == 0) {
+			 // log("  edge_angle: Warning - No valid hex neighbors contributed angles for Boundary Edge " + std::to_string(e->id()) + ". Setting default angles."); // 注释掉
+			 e->total_angle() = 180.0; // 边界边默认180
+			 e->ave_angle() = 90.0; // 默认平均90
+			 return;
 		}
-		catch (const std::exception& ex) {
-			log("Major exception in edge_angle for edge " + std::to_string(e->id()) + ": " + std::string(ex.what()));
-			// 设置安全的默认值
-			e->total_angle() = e->boundary() ? 180.0 : 360.0;
-			e->ave_angle() = 90.0;
+	
+		// 最终角度值验证
+		if (!std::isfinite(total_angle_sum) || total_angle_sum < 0) {
+			 // log("  edge_angle: Warning - Final total_angle_sum (" + std::to_string(total_angle_sum) + ") is invalid for Edge " + std::to_string(e->id()) + ". Resetting to 180.0."); // 注释掉
+			 total_angle_sum = 180.0; // 边界边默认180
 		}
-		catch (...) {
-			log("Unknown major exception in edge_angle for edge " + std::to_string(e->id()));
-			// 设置安全的默认值
-			e->total_angle() = e->boundary() ? 180.0 : 360.0;
-			e->ave_angle() = 90.0;
-		}
+	
+		 e->total_angle() = total_angle_sum;
+		 e->ave_angle() = total_angle_sum / valid_angles_count; // 平均值
+	
+		// log("  edge_angle: Final calculated angles for Edge " + std::to_string(e->id()) + ": total_angle=" + std::to_string(e->total_angle()) + ", ave_angle=" + std::to_string(e->ave_angle())); // 注释掉
+	
 	}
 
 	template<typename M>
 	void sheet_operation<M>::edge_ideal_degree(E* e)
 	{
+		// 检查输入的边指针是否有效
+		if (!e) {
+			// log("edge_ideal_degree: Error - Input edge pointer is null."); // 注释掉
+			return;
+		}
+	
 		try {
-			log("Computing ideal degree for edge ID: " + std::to_string(e->id()) + " (Unconditional calculation)");
-			
-			// 移除入口检查，总是执行计算
-			// ideal_degree 会在下面被赋值，无需在此处重置
-
+			// log("Computing ideal degree for edge ID: " + std::to_string(e->id()) + " (Unconditional calculation)"); // 注释掉
+	
 			if (e->boundary())
 			{
-				if (e->sharp())
+				if (e->sharp() > 0) // 检查 sharp() 返回值是否大于 0
 				{
 					// 检查总角度是否合理
-					if (e->total_angle() < 0 || e->total_angle() > 360) {
-						log("Warning: Edge " + std::to_string(e->id()) + " has abnormal total angle value: " + std::to_string(e->total_angle()) + " for ideal degree calculation");
-						// 使用默认值避免计算错误
+					// total_angle() 在边界锐利边上可能不是 0-360，取决于具体定义
+					// 通常锐利边界边的 ideal_degree 由几何决定，比如 90度角对应 degree 1, 270度角对应 degree 3
+					// 如果 total_angle 代表的是材料内部的角度（通常<180）
+					if (!std::isfinite(e->total_angle()) || e->total_angle() < 0 || e->total_angle() > 360) { // 放宽检查范围，但仍需有限
+						// log("Warning: Edge " + std::to_string(e->id()) + " has abnormal total angle value: " + std::to_string(e->total_angle()) + " for ideal degree calculation"); // 注释掉
+						// 使用默认边界理想度
 						e->ideal_degree() = 2;
 					}
 					else {
+						// 基于角度计算理想度
 						int ideal_degree = round(e->total_angle() / 90.0);
-						ideal_degree = ideal_degree == 0 ? 1 : ideal_degree;
+						// 确保理想度至少为 1 （对于边界边）
+						ideal_degree = (ideal_degree <= 0) ? 1 : ideal_degree;
+						// 边界锐利边的理想度上限通常是 3 (对应 > 270 度的内角)
+						ideal_degree = (ideal_degree > 3) ? 3 : ideal_degree;
 						e->ideal_degree() = ideal_degree;
-						log("Sharp boundary edge " + std::to_string(e->id()) + " ideal degree set to: " + std::to_string(ideal_degree) + " (total angle: " + std::to_string(e->total_angle()) + ")");
-						
-						if (mesh->feature_ideal_degree.find(e->sharp()) == mesh->feature_ideal_degree.end())
+						// log("Sharp boundary edge " + std::to_string(e->id()) + " ideal degree set to: " + std::to_string(ideal_degree) + " (total angle: " + std::to_string(e->total_angle()) + ")"); // 注释掉
+	
+						// 更新 feature_ideal_degree 映射表
+						if (mesh && mesh->feature_ideal_degree.find(e->sharp()) == mesh->feature_ideal_degree.end())
 						{
-							std::vector<E*> sharps;
-							sharps.push_back(e);
+							// std::vector<E*> sharps; // 这两行似乎不需要
+							// sharps.push_back(e);
 							mesh->feature_ideal_degree.insert(std::pair<int, int>(e->sharp(), ideal_degree));
-							log("Added feature ideal degree for sharp ID " + std::to_string(e->sharp()) + ": " + std::to_string(ideal_degree));
+							// log("Added feature ideal degree for sharp ID " + std::to_string(e->sharp()) + ": " + std::to_string(ideal_degree)); // 注释掉
 						}
 					}
 				}
-				else
+				else // 非锐利边界边
 				{
-					e->ideal_degree() = 2;
-					log("Regular boundary edge " + std::to_string(e->id()) + " ideal degree set to: 2");
+					e->ideal_degree() = 2; // 理想度为 2
+					// log("Regular boundary edge " + std::to_string(e->id()) + " ideal degree set to: 2"); // 注释掉
 				}
 			}
-			else
+			else // 内部边
 			{
-				e->ideal_degree() = 4;
-				log("Non-boundary edge " + std::to_string(e->id()) + " ideal degree set to: 4");
+				e->ideal_degree() = 4; // 内部边理想度为 4
+				// log("Non-boundary edge " + std::to_string(e->id()) + " ideal degree set to: 4"); // 注释掉
 			}
-			
-			log("Edge " + std::to_string(e->id()) + " final ideal degree: " + std::to_string(e->ideal_degree()));
+	
+			// log("Edge " + std::to_string(e->id()) + " final ideal degree: " + std::to_string(e->ideal_degree())); // 注释掉
 		}
 		catch (const std::exception& ex) {
-			log("Exception in edge_ideal_degree for edge " + std::to_string(e->id()) + ": " + std::string(ex.what()));
+			// log("Exception in edge_ideal_degree for edge " + std::to_string(e->id()) + ": " + std::string(ex.what())); // 保留或注释掉异常日志
 			// 设置安全的默认值
-			e->ideal_degree() = e->boundary() ? 2 : 4;
+			if(e) e->ideal_degree() = e->boundary() ? 2 : 4;
 		}
 		catch (...) {
-			log("Unknown exception in edge_ideal_degree for edge " + std::to_string(e->id()));
+			// log("Unknown exception in edge_ideal_degree for edge " + std::to_string(e->id())); // 保留或注释掉异常日志
 			// 设置安全的默认值
-			e->ideal_degree() = e->boundary() ? 2 : 4;
+			 if(e) e->ideal_degree() = e->boundary() ? 2 : 4;
 		}
 	}
 
 	template<typename M>
 	void sheet_operation<M>::compute_edge_energy()
 	{
-		log("Starting edge energy computation");
-		mesh->computeNormal();
-		
-		int totalEdges = 0;
-		int boundaryEdges = 0;
-		int sharpEdges = 0;
-		int singularEdges = 0;
-		
-		log("Computing normals and angles for each edge");
+		// log("Starting edge energy computation"); // 注释掉
+		// 确保 mesh 指针有效
+		if(!mesh) {
+			 // 如果需要，可以在此处添加错误处理
+			 return;
+		}
+		mesh->computeNormal(); // 计算法线是后续计算的基础
+	
+		// int totalEdges = 0; // 移除调试用计数器
+		// int boundaryEdges = 0;
+		// int sharpEdges = 0;
+		// int singularEdges = 0;
+	
+		// log("Computing normals and angles for each edge"); // 注释掉
 		for (M::MEIterator eite(mesh); !eite.end(); eite++)
 		{
 			E* e = *eite;
-			totalEdges++;
-			
+			if (!e) continue; // 增加对空指针边的检查
+			// totalEdges++;
+	
 			try {
-				// 记录当前处理的边ID
-				if (totalEdges % 1000 == 0) {
-					log("Processing edge " + std::to_string(totalEdges) + ", current edge ID: " + std::to_string(e->id()));
-				}
-				
-				// 计算角度
-				edge_angle(e);
-				
-				// 计算理想度数
-				edge_ideal_degree(e);
-				
-				// 计算简化能量
-				e->sim_energy() = (int)e->ideal_degree() - (int)e->neighbor_hs.size();
-				
-				// 统计特殊边的数量
-				if (e->boundary()) boundaryEdges++;
-				if (e->sharp()) sharpEdges++;
-				if (e->singularity()) singularEdges++;
-				
-				// 记录特殊边的详细信息 (注释掉，保留每1000条的进度日志)
-				// if (e->boundary() || e->sharp() || e->singularity()) {
-				// 	std::ostringstream details;
-				// 	details << "Edge " << e->id()
-				// 		<< " (boundary: " << (e->boundary() ? "yes" : "no")
-				// 		<< ", sharp: " << (e->sharp() ? std::to_string(e->sharp()) : "no")
-				// 		<< ", singularity: " << (e->singularity() ? "yes" : "no") << ")";
-				// 	details << " - total angle: " << e->total_angle()
-				// 		<< ", ideal degree: " << e->ideal_degree()
-				// 		<< ", actual degree: " << e->neighbor_hs.size()
-				// 		<< ", energy: " << e->sim_energy();
-				// 	log(details.str());
+				// // 记录进度日志 (已注释)
+				// if (totalEdges % 1000 == 0) {
+				//     log("Processing edge " + ...);
 				// }
+	
+				// 计算角度 (假设 edge_angle 是可访问的成员函数或辅助函数)
+				this->edge_angle(e);
+	
+				// 计算理想度数
+				this->edge_ideal_degree(e);
+	
+				// 计算简化能量
+				// 确保 neighbor_hs.size() 正确反映了边的度数
+				e->sim_energy() = (int)e->ideal_degree() - (int)e->neighbor_hs.size();
+	
+				// // 统计特殊边的数量 (已注释)
+				// if (e->boundary()) boundaryEdges++;
+				// if (e->sharp() > 0) sharpEdges++; // 检查 sharp > 0
+				// if (e->singularity()) singularEdges++;
+	
+				// // 记录特殊边的详细信息 (已注释)
+				// if (e->boundary() || e->sharp() > 0 || e->singularity()) { ... }
+	
 			}
 			catch (const std::exception& ex) {
-				log("Exception processing edge ID " + std::to_string(e->id()) + ": " + std::string(ex.what()));
+				// 可以保留最小的异常日志记录
+				// log("Exception processing edge ID " + std::to_string(e->id()) + ": " + std::string(ex.what())); // 注释掉
+				// 考虑添加错误处理，例如设置默认能量
+				if(e) e->sim_energy() = 0.0; // 示例：设置默认能量
 			}
 			catch (...) {
-				log("Unknown exception processing edge ID " + std::to_string(e->id()));
+				// 可以保留最小的异常日志记录
+				// log("Unknown exception processing edge ID " + std::to_string(e->id())); // 注释掉
+				if(e) e->sim_energy() = 0.0; // 示例：设置默认能量
 			}
 		}
-		
-		log("Edge energy computation completed");
-		log("Total edges: " + std::to_string(totalEdges) + 
-			", boundary edges: " + std::to_string(boundaryEdges) + 
-			", sharp edges: " + std::to_string(sharpEdges) + 
-			", singular edges: " + std::to_string(singularEdges));
+	
+		// // 最终的统计日志 (已注释)
+		// log("Edge energy computation completed");
+		// log("Total edges: " + ...);
 	}
 
 	template<typename M>
-	std::vector<std::vector<typename sheet_operation<M>::E*>> sheet_operation<M>::get_sheet_parallel_edges(std::vector<E*>sheet)
+	std::vector<std::vector<typename sheet_operation<M>::E*>> sheet_operation<M>::get_sheet_parallel_edges(std::vector<E*> sheet)
 	{
-		log("Starting get_sheet_parallel_edges, sheet size: " + std::to_string(sheet.size()));
-		std::vector<H*> hs;
+		// log("Starting get_sheet_parallel_edges, sheet size: " + std::to_string(sheet.size())); // 注释掉
+	
+		std::vector<H*> hs; // 用于后续重置标记
 		std::vector<std::vector<E*>> parallel_es;
-
-		// 首先重置sheet中所有边相邻的六面体的标记
-		log("Initializing hexahedra marks...");
-		std::set<int> processed_hex_ids; // 用于避免重复处理同一个六面体
+	
+		// 1. 重置与 sheet 相关的六面体和边的标记 (mark 用于防止重复处理)
+		// log("Initializing hexahedra marks..."); // 注释掉
+		std::set<int> processed_hex_ids; // 跟踪已处理的六面体ID
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++) {
 			E* e = sheet[eIndex];
-			if (!e) continue;
-			
+			if (!e) continue; // 跳过空指针边
+	
 			for (int ehIndex = 0; ehIndex < e->neighbor_hs.size(); ehIndex++) {
 				int hex_id = e->neighbor_hs[ehIndex];
-				if (processed_hex_ids.find(hex_id) != processed_hex_ids.end()) {
-					continue; // 已经处理过这个六面体
+				// 如果这个六面体ID已经被处理过，则跳过
+				if (processed_hex_ids.count(hex_id)) {
+					continue;
 				}
-				
+	
 				H* eh = mesh->idHexs(hex_id);
 				if (eh) {
-					eh->mark() = false; // 重置标记
-					processed_hex_ids.insert(hex_id);
+					eh->mark() = false; // 重置六面体标记
+					processed_hex_ids.insert(hex_id); // 记录已处理
+					hs.push_back(eh); // 添加到列表以便后续重置边的标记
+	
+					// 同时重置该六面体内所有边的标记
+					for(int he_id : eh->es) {
+						E* he = mesh->idEdges(he_id);
+						if(he) he->mark() = false;
+					}
 				}
 			}
 		}
-		log("Finished initializing marks for " + std::to_string(processed_hex_ids.size()) + " hexahedra");
-		
-		// 记录初始处理信息
-		int edgesProcessed = 0;
-		int hexsFound = 0;
-		int parallelPairsFound = 0;
-		
+		// log("Finished initializing marks for " + std::to_string(processed_hex_ids.size()) + " hexahedra"); // 注释掉
+	
+		// 2. 查找平行边对
+		// int edgesProcessed = 0; // 移除计数器
+		// int hexsFound = 0;
+		// int parallelPairsFound = 0;
+	
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
 		{
 			try {
 				E* e = sheet[eIndex];
-				if (!e) {
-					log("  Warning: Null edge at index " + std::to_string(eIndex));
+				// 跳过无效边
+				if (!e || e->vs.size() != 2) {
+					// log("  Warning: Null or invalid edge at index " + std::to_string(eIndex)); // 注释掉
 					continue;
 				}
-				
-				// log("  Processing edge ID: " + std::to_string(e->id()) + ", Adjacent hexahedra: " + std::to_string(e->neighbor_hs.size())); // Commented out
-				edgesProcessed++;
-				
+				// edgesProcessed++;
+	
+				// 遍历邻接六面体
 				for (int ehIndex = 0; ehIndex < e->neighbor_hs.size(); ehIndex++)
 				{
 					try {
-						//检查六面体ID是否有效
-						if (e->neighbor_hs[ehIndex] < 0 || e->neighbor_hs[ehIndex] >= mesh->maxHid()) {
-							log("    Warning: Edge " + std::to_string(e->id()) + " has invalid adjacent hexahedron ID: " + std::to_string(e->neighbor_hs[ehIndex]));
-							continue;
-						}
-						
-						//获取邻接六面体
 						H* eh = mesh->idHexs(e->neighbor_hs[ehIndex]);
-						if (!eh) {
-							log("    Warning: Unable to get adjacent hexahedron ID: " + std::to_string(e->neighbor_hs[ehIndex]));
+						// 跳过无效六面体或已处理过的六面体
+						if (!eh || eh->mark()) { // 使用 mark() 检查是否已处理
+							// log("    Skipping null or already processed hexahedron ID: " + std::to_string(e->neighbor_hs[ehIndex])); // 注释掉
 							continue;
 						}
-						
-						// log("    Processing adjacent hexahedron ID: " + std::to_string(eh->id())); // Commented out
-						
-						if (eh->mark()!=0) {
-							// log("    Hexahedron already processed, skipping"); // Commented out
+	
+						eh->mark() = true; // 标记当前六面体为已处理
+						// hs.push_back(eh); // hs 列表在初始重置时已收集
+						// hexsFound++;
+	
+						// 获取六面体内与边 e 邻接的面
+						std::vector<F*> nfs = mesh->e_adj_f_in_hex(eh, e);
+						if (nfs.size() < 1 || !nfs[0]) { // 需要至少一个有效面
+							// log("    Warning: No valid adjacent faces found for edge " + std::to_string(e->id()) + " in hex " + std::to_string(eh->id())); // 注释掉
 							continue;
 						}
-						
-						eh->mark() = true;
-						hs.push_back(eh);
-						hexsFound++;
-
-						//获取平行边
-						std::vector<F*> nfs;
-						try {
-							nfs = mesh->e_adj_f_in_hex(eh, e);
-							// log("    Found " + std::to_string(nfs.size()) + " adjacent faces in hexahedron"); // Commented out
-							
-							if (nfs.size() < 1) {
-								// log("    Warning: No adjacent faces found for edge in hexahedron"); // Commented out
-								continue;
-							}
-						}
-						catch(const std::exception& ex) {
-							log("    Exception getting adjacent faces: " + std::string(ex.what()));
-							continue;
-						}
-						
-						F* nf = nfs[0];
-						if (!nf) {
-							log("    Warning: Null adjacent face");
-							continue;
-						}
-						
-						// log("    Using adjacent face ID: " + std::to_string(nf->id())); // Commented out
-
-						//获取边的顶点
-						if (e->vs.size() < 2) {
-							log("    Warning: Edge " + std::to_string(e->id()) + " has insufficient vertices: " + std::to_string(e->vs.size()));
-							continue;
-						}
-						
-						// 检查顶点ID是否有效
-						if (e->vs[0] < 0 || e->vs[0] >= mesh->maxVid() || e->vs[1] < 0 || e->vs[1] >= mesh->maxVid()) {
-							log("    Warning: Edge has invalid vertex IDs: " + std::to_string(e->vs[0]) + ", " + std::to_string(e->vs[1]));
-							continue;
-						}
-						
+						F* nf = nfs[0]; // 使用第一个邻接面开始
+	
+						// 获取边的顶点
 						V* ev1 = mesh->idVertices(e->vs[0]);
 						V* ev2 = mesh->idVertices(e->vs[1]);
-						
 						if (!ev1 || !ev2) {
-							log("    Warning: Unable to get edge vertices");
+							// log("    Warning: Unable to get edge vertices for edge " + std::to_string(e->id())); // 注释掉
 							continue;
 						}
-						
-						// log("    Edge vertices: " + std::to_string(ev1->id()) + " and " + std::to_string(ev2->id())); // Commented out
-
-						//获取第一个翻转边
-						E* ne1 = nullptr;
-						E* ne2 = nullptr;
-						try {
-							ne1 = mesh->flip_e(nf, e, ev1);
-							if (!ne1) {
-								log("    Warning: Failed to get first flip edge for vertex " + std::to_string(ev1->id()));
-								continue;
-							}
-							
-							ne2 = mesh->flip_e(nf, e, ev2);
-							if (!ne2) {
-								log("    Warning: Failed to get first flip edge for vertex " + std::to_string(ev2->id()));
-								continue;
-							}
-							
-							// log("    First flip edges: " + std::to_string(ne1->id()) + " and " + std::to_string(ne2->id())); // Commented out
-						}
-						catch(const std::exception& ex) {
-							log("    Exception during edge flipping: " + std::string(ex.what()));
+	
+						// 获取起始的翻转边
+						E* ne1 = mesh->flip_e(nf, e, ev1);
+						E* ne2 = mesh->flip_e(nf, e, ev2);
+						if (!ne1 || !ne2) {
+							// log("    Warning: Failed to get initial flip edges for edge " + std::to_string(e->id())); // 注释掉
 							continue;
 						}
-						
-						//获取翻转面
-						F* nf1 = nullptr;
-						F* nf2 = nullptr;
-						try {
-							nf1 = mesh->flip_f(eh, nf, ne1);
-							if (!nf1) {
-								log("    Warning: Failed to get first flip face for edge " + std::to_string(ne1->id()));
-								continue;
-							}
-							
-							nf2 = mesh->flip_f(eh, nf, ne2);
-							if (!nf2) {
-								log("    Warning: Failed to get first flip face for edge " + std::to_string(ne2->id()));
-								continue;
-							}
-							
-							// log("    First flip faces: " + std::to_string(nf1->id()) + " and " + std::to_string(nf2->id())); // Commented out
-						}
-						catch(const std::exception& ex) {
-							log("    Exception during face flipping: " + std::string(ex.what()));
+	
+						// 获取起始的翻转面
+						F* nf1 = mesh->flip_f(eh, nf, ne1);
+						F* nf2 = mesh->flip_f(eh, nf, ne2);
+						if (!nf1 || !nf2) {
+							// log("    Warning: Failed to get initial flip faces for edges " + std::to_string(ne1->id()) + "/" + std::to_string(ne2->id())); // 注释掉
 							continue;
 						}
-
-						//找平行边对
-						// log("    Starting to find parallel edge pairs by flipping 4 times..."); // Commented out
+	
+						// 循环翻转4次查找平行边对
 						for (int peIndex = 0; peIndex < 4; peIndex++)
 						{
 							try {
-								// log("      Flip iteration " + std::to_string(peIndex+1)); // Commented out
-								
+								// 执行翻转操作，并检查每一步的返回指针
 								ne1 = mesh->flip_e(nf1, ne1, ev1);
-								if (!ne1) {
-									log("      Warning: Failed to flip edge for vertex " + std::to_string(ev1->id()) + " at iteration " + std::to_string(peIndex+1));
-									break;
-								}
-								
+								if (!ne1) break;
 								ev1 = mesh->flip_v(ne1, ev1);
-								if (!ev1) {
-									log("      Warning: Failed to flip vertex " + std::to_string(ev1->id()) + " at iteration " + std::to_string(peIndex+1));
-									break;
-								}
-								
+								if (!ev1) break;
+	
 								ne2 = mesh->flip_e(nf2, ne2, ev2);
-								if (!ne2) {
-									log("      Warning: Failed to flip edge for vertex " + std::to_string(ev2->id()) + " at iteration " + std::to_string(peIndex+1));
-									break;
-								}
-								
+								if (!ne2) break;
 								ev2 = mesh->flip_v(ne2, ev2);
-								if (!ev2) {
-									log("      Warning: Failed to flip vertex " + std::to_string(ev2->id()) + " at iteration " + std::to_string(peIndex+1));
-									break;
-								}
-								
-								// log("      After flipping: ne1=" + std::to_string(ne1->id()) + ", ne2=" + std::to_string(ne2->id()) + ", ev1=" + std::to_string(ev1->id()) + ", ev2=" + std::to_string(ev2->id())); // Commented out
-
+								if (!ev2) break;
+	
+								// 检查找到的平行边之一 (ne1) 是否已被标记（表示这个平行关系已找到）
 								if (ne1->mark()) {
-									// log("      Edge " + std::to_string(ne1->id()) + " already processed, skipping"); // Commented out
-									continue;
+									continue; // 如果标记了，说明这对平行边已处理
 								}
-
+	
+								// 标记这对平行边（ne1 和 ne2）为已找到
 								ne1->mark() = true;
 								ne2->mark() = true;
+	
 								std::vector<E*> pair_es = { ne1, ne2 };
 								parallel_es.push_back(pair_es);
-								parallelPairsFound++;
-								
-								// log("      Found parallel edge pair: " + std::to_string(ne1->id()) + " and " + std::to_string(ne2->id())); // Commented out
+								// parallelPairsFound++;
 							}
-							catch(const std::exception& ex) {
-								log("      Exception during parallel edges search iteration " + std::to_string(peIndex+1) + ": " + std::string(ex.what()));
-								break;
+							catch (...) { // 捕获翻转过程中的任何异常
+								// log("      Exception during parallel edges search iteration " + ...); // 注释掉
+								break; // 出现异常则停止当前六面体的查找
 							}
-						}
+						} // 结束翻转循环
 					}
-					catch(const std::exception& ex) {
-						log("    Exception processing adjacent hex at index " + std::to_string(ehIndex) + ": " + std::string(ex.what()));
+					catch (...) { // 捕获处理单个六面体时的异常
+						// log("    Exception processing adjacent hex at index " + ...); // 注释掉
 					}
-					catch(...) {
-						log("    Unknown exception processing adjacent hex at index " + std::to_string(ehIndex));
-					}
-				}
+				} // 结束遍历邻接六面体
 			}
-			catch(const std::exception& ex) {
-				log("  Exception processing edge at index " + std::to_string(eIndex) + ": " + std::string(ex.what()));
+			catch (...) { // 捕获处理单个 sheet 边时的异常
+				// log("  Exception processing edge at index " + ...); // 注释掉
 			}
-			catch(...) {
-				log("  Unknown exception processing edge at index " + std::to_string(eIndex));
-			}
-		}
-
-		log("Processing complete. Edges processed: " + std::to_string(edgesProcessed) + 
-			", hexahedra found: " + std::to_string(hexsFound) + 
-			", parallel pairs found: " + std::to_string(parallelPairsFound));
-		
-		//重置标记
-		log("Resetting marks on " + std::to_string(hs.size()) + " hexahedra");
-		for (int hIndex = 0; hIndex < hs.size(); hIndex++)
+		} // 结束遍历 sheet 边
+	
+		// log("Processing complete. Found " + std::to_string(parallel_es.size()) + " parallel edge pairs."); // 注释掉
+	
+		// 3. 重置所有处理过的六面体及其内部边的标记
+		// log("Resetting marks on " + std::to_string(hs.size()) + " hexahedra"); // 注释掉
+		for (H* h : hs)
 		{
-			try {
-				H* h = hs[hIndex];
-				if (!h) {
-					log("  Warning: Null hexahedron at index " + std::to_string(hIndex));
-					continue;
+			if (!h) continue;
+			h->mark() = false; // 重置六面体标记
+			for (int he_id : h->es) {
+				E* he = mesh->idEdges(he_id);
+				if (he) {
+					he->mark() = false; // 重置边标记
 				}
-				
-				h->mark() = false;
-				
-				log("  Resetting mark on hexahedron " + std::to_string(h->id()) + " with " + std::to_string(h->es.size()) + " edges");
-				for (int heIndex = 0; heIndex < h->es.size(); heIndex++)
-				{
-					try {
-						if (h->es[heIndex] < 0 || h->es[heIndex] >= mesh->maxEid()) {
-							log("    Warning: Hexahedron has invalid edge ID: " + std::to_string(h->es[heIndex]));
-							continue;
-						}
-						
-						E* he = mesh->idEdges(h->es[heIndex]);
-						if (!he) {
-							log("    Warning: Unable to get edge ID: " + std::to_string(h->es[heIndex]));
-							continue;
-						}
-						
-						he->mark() = false;
-					}
-					catch(const std::exception& ex) {
-						log("    Exception resetting edge mark at index " + std::to_string(heIndex) + ": " + std::string(ex.what()));
-					}
-				}
-			}
-			catch(const std::exception& ex) {
-				log("  Exception resetting hexahedron at index " + std::to_string(hIndex) + ": " + std::string(ex.what()));
 			}
 		}
-		
+	
 		return parallel_es;
 	}
 
 	template<typename M>
 	double sheet_operation<M>::predict_sheet_collapse_energy(std::vector<E*> sheet)
 	{
-		log("======= Starting sheet collapse energy prediction =======");
-		log("Input sheet size: " + std::to_string(sheet.size()) + " edges");
-		
-		/*energy = ideal-real，energy越小越好*/
+		// log("======= Starting sheet collapse energy prediction ======="); // 注释掉
+		// log("Input sheet size: " + std::to_string(sheet.size()) + " edges"); // 注释掉
+	
+		// 检查 mesh 指针和空 sheet
+		if (!mesh || sheet.empty()) {
+			// log("predict_sheet_collapse_energy: Error - Mesh pointer is null or input sheet is empty."); // 可选保留
+			return -99999.0; // 使用常量或明确的错误码
+		}
+	
 		double original_total_energy = 0;
 		double predict_total_energy = 0;
-		double cannot_collapse = -99999;//99999表示该sheet不能被折叠
-
-		//不能折叠两个角点
+		const double cannot_collapse = -99999.0; // 定义不可折叠的返回值
+	
+		// 1. 检查所有 sheet 边的顶点约束条件
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
 		{
 			E* e = sheet[eIndex];
+			// 检查边和顶点数量
+			if (!e || e->vs.size() != 2) {
+				// log("Warning: Skipping invalid edge in vertex constraint check."); // 可选保留
+				continue; // 跳过无效边
+			}
+	
 			V* ev1 = mesh->idVertices(e->vs[0]);
 			V* ev2 = mesh->idVertices(e->vs[1]);
-			
-			// 检查feature_vertex值是否异常（内存垃圾值），如果是则重置为安全值0
-			if (ev1->feature_vertex() < -1000000 || ev1->feature_vertex() > 1000000) {
-				log("Warning: Vertex " + std::to_string(ev1->id()) + " has abnormal feature_vertex value: " + 
-					std::to_string(ev1->feature_vertex()) + ", resetting to 0");
-				ev1->feature_vertex() = 0;
+	
+			// 检查顶点指针
+			if (!ev1 || !ev2) {
+				 // log("Warning: Edge " + std::to_string(e->id()) + " has null vertex pointer(s). Cannot check constraints."); // 可选保留
+				 return cannot_collapse; // 如果顶点无效，无法安全地检查约束
 			}
-			
-			if (ev2->feature_vertex() < -1000000 || ev2->feature_vertex() > 1000000) {
-				log("Warning: Vertex " + std::to_string(ev2->id()) + " has abnormal feature_vertex value: " + 
-					std::to_string(ev2->feature_vertex()) + ", resetting to 0");
-				ev2->feature_vertex() = 0;
-			}
-			
-			log("Checking vertex constraints for edge " + std::to_string(e->id()));
-			log("  Vertex1 ID: " + std::to_string(ev1->id()) + 
-				", Feature vertex: " + std::to_string(ev1->feature_vertex()) + 
-				", Is corner: " + (ev1->corner() ? "yes" : "no"));
-			log("  Vertex2 ID: " + std::to_string(ev2->id()) + 
-				", Feature vertex: " + std::to_string(ev2->feature_vertex()) + 
-				", Is corner: " + (ev2->corner() ? "yes" : "no"));
-
-			if (ev1->corner() && ev2->corner())
-			{
-				log("Both vertices are corners, cannot collapse, returning: " + std::to_string(cannot_collapse));
+	
+			// // 检查并重置异常的 feature_vertex 值 (可选，如果数据可能不稳定则保留)
+			// if (ev1->feature_vertex() < -1000000 || ev1->feature_vertex() > 1000000) {
+			//      ev1->feature_vertex() = 0;
+			// }
+			// if (ev2->feature_vertex() < -1000000 || ev2->feature_vertex() > 1000000) {
+			//      ev2->feature_vertex() = 0;
+			// }
+	
+			// log("Checking vertex constraints for edge " + std::to_string(e->id())); // 注释掉
+			// ... (其他详细顶点属性日志注释掉) ...
+	
+			// 执行约束检查
+			if (ev1->corner() && ev2->corner()) {
+				// log("Both vertices are corners..."); // 注释掉
 				return cannot_collapse;
 			}
-			if (ev1->feature_vertex() < 0 && ev2->feature_vertex() < 0)
-			{
-				log("Both vertices have feature values < 0, cannot collapse, returning: " + std::to_string(cannot_collapse));
+			if (ev1->feature_vertex() < 0 && ev2->feature_vertex() < 0) {
+				// log("Both vertices have feature values < 0..."); // 注释掉
 				return cannot_collapse;
 			}
-			if (ev1->feature_vertex() < 0 && ev2->feature_vertex() > 0)
+			// 检查特征边和角点的连接性 (需要 mesh->feature_edge_corner)
+			if ( (ev1->feature_vertex() < 0 && ev2->feature_vertex() > 0) ||
+				 (ev1->feature_vertex() > 0 && ev2->feature_vertex() < 0) )
 			{
-				int sharp_id = ev2->feature_vertex();
-				int corner_id = ev1->feature_vertex();
-				log("  Vertex1 feature < 0, Vertex2 feature > 0");
-				log("  Checking connection between sharp_id " + std::to_string(sharp_id) + " and corner_id " + std::to_string(corner_id));
-				
+				int sharp_id = (ev1->feature_vertex() > 0) ? ev1->feature_vertex() : ev2->feature_vertex();
+				int corner_id = (ev1->feature_vertex() < 0) ? ev1->feature_vertex() : ev2->feature_vertex();
+				// log("  Vertex feature mismatch (one < 0, one > 0)..."); // 注释掉
+	
 				try {
-					std::vector<int>connect_corners_id = mesh->feature_edge_corner[sharp_id];
-					log("  Connected corners count: " + std::to_string(connect_corners_id.size()));
-					
-					std::vector<int>::iterator ite = std::find(connect_corners_id.begin(), connect_corners_id.end(), corner_id);
-					if (ite == connect_corners_id.end())
-					{
-						log("  Corner not connected to feature edge, cannot collapse, returning: " + std::to_string(cannot_collapse));
-						return cannot_collapse;
+					 // 确保 map 访问安全
+					if (mesh->feature_edge_corner.count(sharp_id)) {
+						const std::vector<int>& connect_corners_id = mesh->feature_edge_corner.at(sharp_id);
+						// log("  Connected corners count: " + ...); // 注释掉
+						if (std::find(connect_corners_id.begin(), connect_corners_id.end(), corner_id) == connect_corners_id.end()) {
+							// log("  Corner not connected to feature edge..."); // 注释掉
+							return cannot_collapse;
+						} // else { log("  Corner connected..."); } // 注释掉
+					} else {
+						 // log("  Sharp ID " + ... + " not found in map..."); // 可选保留警告
+						 return cannot_collapse;
 					}
-					else {
-						log("  Corner connected to feature edge, can proceed with checks");
-					}
-				} catch (const std::exception& e) {
-					log("  Exception while checking connection: " + std::string(e.what()));
-					log("  Exception handling: assuming cannot collapse, returning: " + std::to_string(cannot_collapse));
-					return cannot_collapse;
+				} catch (...) { // 捕获潜在异常
+					 // log("  Exception while checking connection..."); // 注释掉
+					 return cannot_collapse;
 				}
 			}
-			if (ev1->feature_vertex() > 0 && ev2->feature_vertex() < 0)
-			{
-				int sharp_id = ev1->feature_vertex();
-				int corner_id = ev2->feature_vertex();
-				log("  Vertex1 feature > 0, Vertex2 feature < 0");
-				log("  Checking connection between sharp_id " + std::to_string(sharp_id) + " and corner_id " + std::to_string(corner_id));
-				
-				try {
-					std::vector<int>connect_corners_id = mesh->feature_edge_corner[sharp_id];
-					log("  Connected corners count: " + std::to_string(connect_corners_id.size()));
-					
-					std::vector<int>::iterator ite = std::find(connect_corners_id.begin(), connect_corners_id.end(), corner_id);
-					if (ite == connect_corners_id.end())
-					{
-						log("  Corner not connected to feature edge, cannot collapse, returning: " + std::to_string(cannot_collapse));
-						return cannot_collapse;
-					}
-					else {
-						log("  Corner connected to feature edge, can proceed with checks");
-					}
-				} catch (const std::exception& e) {
-					log("  Exception while checking connection: " + std::string(e.what()));
-					log("  Exception handling: assuming cannot collapse, returning: " + std::to_string(cannot_collapse));
-					return cannot_collapse;
-				}
-			}
-
+			// 检查两个特征点是否属于同一特征线
 			if (ev1->feature_vertex() > 0 && ev2->feature_vertex() > 0)
 			{
-				log("  Both vertices have feature values > 0");
-				log("  Checking if feature IDs match: " + std::to_string(ev1->feature_vertex()) + " vs " + std::to_string(ev2->feature_vertex()));
-				
-				if (ev1->feature_vertex() != ev2->feature_vertex())
-				{
-					log("  Feature IDs don't match, cannot collapse, returning: " + std::to_string(cannot_collapse));
+				// log("  Both vertices have feature values > 0"); // 注释掉
+				if (ev1->feature_vertex() != ev2->feature_vertex()) {
+					// log("  Feature IDs don't match..."); // 注释掉
 					return cannot_collapse;
-				}
-				else {
-					log("  Feature IDs match, can proceed with checks");
-				}
+				} // else { log("  Feature IDs match..."); } // 注释掉
 			}
-		}
-		
-		log("Vertex constraint checks passed, continuing");
-
-		//获取sheet中的所有边
+		} // 结束顶点约束检查循环
+	
+		// log("Vertex constraint checks passed, continuing"); // 注释掉
+	
+		// 2. 获取平行边并评估能量
 		try {
-			log("Starting to get parallel edges in sheet");
-			std::vector<std::vector<E*>>parallel_es = get_sheet_parallel_edges(sheet);
-			log("Retrieved " + std::to_string(parallel_es.size()) + " pairs of parallel edges");
-
-			//评估是否可以折叠
+			// log("Starting to get parallel edges in sheet"); // 注释掉
+			std::vector<std::vector<E*>> parallel_es = get_sheet_parallel_edges(sheet); // 假设此函数健壮
+			// log("Retrieved " + std::to_string(parallel_es.size()) + " pairs of parallel edges"); // 注释掉
+	
 			int temp_less_num = 0;
 			int temp_equal_num = 0;
 			int temp_large_num = 0;
-			int temp_boundary_num = 0;//估计边界折叠参数
-
+			int temp_boundary_num = 0; // 边界折叠估计参数
+	
 			for (int peIndex = 0; peIndex < parallel_es.size(); peIndex++)
 			{
-				std::vector<E*> one_pes = parallel_es[peIndex];
-				E* e1 = one_pes[0];
-				E* e2 = one_pes[1];
-				log("\nProcessing parallel edge pair #" + std::to_string(peIndex+1) + ":");
-				log("  Edge1 ID: " + std::to_string(e1->id()) + 
-					", Boundary: " + (e1->boundary() ? "yes" : "no") + 
-					", Sharp: " + (e1->sharp() ? std::to_string(e1->sharp()) : "no") + 
-					", Angle: " + std::to_string(e1->total_angle()) + 
-					", Adjacent hexahedra: " + std::to_string(e1->neighbor_hs.size()) +
-					", Energy: " + std::to_string(e1->sim_energy()));
-				log("  Edge2 ID: " + std::to_string(e2->id()) + 
-					", Boundary: " + (e2->boundary() ? "yes" : "no") + 
-					", Sharp: " + (e2->sharp() ? std::to_string(e2->sharp()) : "no") + 
-					", Angle: " + std::to_string(e2->total_angle()) + 
-					", Adjacent hexahedra: " + std::to_string(e2->neighbor_hs.size()) +
-					", Energy: " + std::to_string(e2->sim_energy()));
-				
-				if (e1->sharp() && e2->sharp())
-				{
-					log("  Both edges are sharp, cannot collapse, returning: " + std::to_string(cannot_collapse));
+				// 检查平行边对是否有效
+				if(parallel_es[peIndex].size() != 2) continue;
+				E* e1 = parallel_es[peIndex][0];
+				E* e2 = parallel_es[peIndex][1];
+				if (!e1 || !e2) continue; // 空指针检查
+	
+				// log("\nProcessing parallel edge pair #" + ...); // 注释掉
+				// ... (详细边属性日志注释掉) ...
+	
+				// 检查是否两条边都是锐利边
+				if (e1->sharp() > 0 && e2->sharp() > 0) {
+					// log("  Both edges are sharp, cannot collapse..."); // 注释掉
 					return cannot_collapse;
 				}
-				
+	
 				double predict_angle = 0;
 				double predict_degree = 0;
-
-				//计算预测角度
-				log("  Calculating predicted angle");
-				if (e1->boundary() && e2->boundary())
-				{
-					if (e1->sharp() && !e2->sharp())
-					{
-						predict_angle = e1->total_angle();
-						log("    Both edges are boundary, Edge1 is sharp, using Edge1 angle: " + std::to_string(predict_angle));
-					}
-					else if (e2->sharp() && !e1->sharp())
-					{
-						predict_angle = e2->total_angle();
-						log("    Both edges are boundary, Edge2 is sharp, using Edge2 angle: " + std::to_string(predict_angle));
-					}
-					else
-					{
-						predict_angle = (e1->total_angle() + e2->total_angle()) * 0.5;
-						log("    Both edges are boundary, using average angle: " + std::to_string(predict_angle));
-					}
-				}
-				else if (e1->boundary() && !e2->boundary())
-				{
+	
+				// 计算预测角度
+				// log("  Calculating predicted angle"); // 注释掉
+				if (e1->boundary() && e2->boundary()) {
+					if (e1->sharp() > 0 && !(e2->sharp() > 0)) predict_angle = e1->total_angle();
+					else if (!(e1->sharp() > 0) && e2->sharp() > 0) predict_angle = e2->total_angle();
+					else predict_angle = (e1->total_angle() + e2->total_angle()) * 0.5;
+				} else if (e1->boundary()) {
 					predict_angle = e1->total_angle();
-					log("    Edge1 is boundary, using Edge1 angle: " + std::to_string(predict_angle));
-				}
-				else if (!e1->boundary() && e2->boundary())
-				{
+				} else if (e2->boundary()) {
 					predict_angle = e2->total_angle();
-					log("    Edge2 is boundary, using Edge2 angle: " + std::to_string(predict_angle));
-				}
-				else
-				{
+				} else {
 					predict_angle = (e1->total_angle() + e2->total_angle()) * 0.5;
-					log("    Neither edge is boundary, using average angle: " + std::to_string(predict_angle));
 				}
-
-				//计算预测度数
-				log("  Calculating predicted degree");
-				if (e1->boundary() && e2->boundary())
-				{
+				// log("    Predicted angle: " + ...); // 注释掉
+	
+	
+				// 计算预测度数
+				// log("  Calculating predicted degree"); // 注释掉
+				if (e1->boundary() && e2->boundary()) {
 					predict_degree = e1->neighbor_hs.size() + e2->neighbor_hs.size() - 2;
-					log("    Both edges are boundary, degree calculation: " + std::to_string(e1->neighbor_hs.size()) + " + " + std::to_string(e2->neighbor_hs.size()) + " - 2 = " + std::to_string(predict_degree));
-				}
-				else
-				{
+				} else {
 					predict_degree = e1->neighbor_hs.size() + e2->neighbor_hs.size() - 4;
-					log("    Degree calculation: " + std::to_string(e1->neighbor_hs.size()) + " + " + std::to_string(e2->neighbor_hs.size()) + " - 4 = " + std::to_string(predict_degree));
 				}
-				
-				//度数过小的边禁止折叠
-				log("  Checking if degree is too small");
-				if (e1->boundary() || e2->boundary())
-				{
-					if (predict_degree < 1)
-					{
-						log("    Contains boundary edge and predicted degree < 1, cannot collapse, returning: " + std::to_string(cannot_collapse));
+				// log("    Predicted degree: " + ...); // 注释掉
+	
+				// 检查度数约束
+				// log("  Checking if degree is too small"); // 注释掉
+				if (e1->boundary() || e2->boundary()) {
+					if (predict_degree < 1) {
+						// log("    Contains boundary edge and predicted degree < 1..."); // 注释掉
+						return cannot_collapse;
+					}
+				} else {
+					if (predict_degree < 2) {
+						// log("    Predicted degree < 2..."); // 注释掉
 						return cannot_collapse;
 					}
 				}
-				else
-				{
-					if (predict_degree < 2)
-					{
-						log("    Predicted degree < 2, cannot collapse, returning: " + std::to_string(cannot_collapse));
-						return cannot_collapse;
-					}
+	
+				// 计算能量变化
+				// 基于预测角度推算预测的理想度数
+				double ideal_degree_pred_angle_f = predict_angle / 90.0;
+				int ideal_degree_pred = static_cast<int>(round(ideal_degree_pred_angle_f));
+				if (!e1->boundary() && !e2->boundary()) { // 内部边理想度为4
+					 ideal_degree_pred = 4;
+				} else { // 边界边理想度至少为1，通常不超过3
+					 ideal_degree_pred = (ideal_degree_pred <= 0) ? 1 : ideal_degree_pred;
+					 ideal_degree_pred = (ideal_degree_pred > 3) ? 3 : ideal_degree_pred; // 限制边界理想度上限
 				}
-
-				//计算能量
-				int temp_predict_energy = abs(round(predict_angle / 90.0) - predict_degree);
-				log("  Calculating predicted energy: abs(round(" + std::to_string(predict_angle) + " / 90.0) - " + std::to_string(predict_degree) + ") = " + std::to_string(temp_predict_energy));
+	
+				int temp_predict_energy = abs(ideal_degree_pred - static_cast<int>(predict_degree)); // 使用推算的理想度
+				// log("  Calculating predicted energy: abs(" + ...); // 注释掉
 				predict_total_energy += temp_predict_energy;
-
+	
 				int temp_original_energy1 = abs(e1->sim_energy());
 				int temp_original_energy2 = abs(e2->sim_energy());
 				original_total_energy += temp_original_energy1;
 				original_total_energy += temp_original_energy2;
-				
-				log("  Cumulative original energy: " + std::to_string(original_total_energy) + ", cumulative predicted energy: " + std::to_string(predict_total_energy));
-				log("  Edge1 energy: " + std::to_string(temp_original_energy1) + ", Edge2 energy: " + std::to_string(temp_original_energy2));
-
-				//边界能量		
+	
+				// log("  Cumulative original energy: " + ...); // 注释掉
+				// log("  Edge1 energy: " + ...); // 注释掉
+	
+				// 估计边界能量变化
 				int boundary_energy1 = 0;
 				int boundary_energy2 = 0;
-				if (e1->boundary())
-				{
+				if (e1->boundary()) {
 					boundary_energy1 = temp_original_energy1 - temp_predict_energy;
-					log("  Edge1 boundary energy calculation: " + std::to_string(temp_original_energy1) + " - " + std::to_string(temp_predict_energy) + " = " + std::to_string(boundary_energy1));
+					// log("  Edge1 boundary energy calculation: " + ...); // 注释掉
 				}
-				if (e2->boundary())
-				{
+				if (e2->boundary()) {
 					boundary_energy2 = temp_original_energy2 - temp_predict_energy;
-					log("  Edge2 boundary energy calculation: " + std::to_string(temp_original_energy2) + " - " + std::to_string(temp_predict_energy) + " = " + std::to_string(boundary_energy2));
+					// log("  Edge2 boundary energy calculation: " + ...); // 注释掉
 				}
-				
-				//估计边界折叠能量
-				if ((e1->boundary() || e2->boundary()) && !(e1->boundary() && e2->boundary()))
-				{
-					log("  One edge is boundary while the other is not, estimating boundary collapse energy");
-					if (temp_boundary_num <= 0)
-					{
-						if (boundary_energy1 > 0 || boundary_energy2 > 0)
-						{
-							temp_boundary_num = 1;
-							log("    Boundary energy > 0, setting temp_boundary_num = 1");
-						}
-						else if (boundary_energy1 == 0 && boundary_energy2 == 0)
-						{
-							log("    Boundary energy = 0, temp_boundary_num remains: " + std::to_string(temp_boundary_num));
-						}
-						else
-						{
-							temp_boundary_num = -1;
-							log("    Boundary energy < 0, setting temp_boundary_num = -1");
-						}
+	
+				// 更新边界折叠估计参数
+				if ((e1->boundary() || e2->boundary()) && !(e1->boundary() && e2->boundary())) {
+					// log("  One edge is boundary while the other is not..."); // 注释掉
+					if (temp_boundary_num <= 0) { // 仅当还不是正数时更新
+						if (boundary_energy1 > 0 || boundary_energy2 > 0) temp_boundary_num = 1;
+						else if (boundary_energy1 == 0 && boundary_energy2 == 0) temp_boundary_num = 0;
+						else temp_boundary_num = -1;
+						// log("    Updated temp_boundary_num: " + ...); // 注释掉
 					}
 				}
-
-				//估计折叠能量
-				log("  Estimating collapse energy");
-				if (temp_original_energy1 > temp_predict_energy || temp_original_energy2 > temp_predict_energy)
-				{
-					temp_large_num++;
-					log("    Original energy > predicted energy, temp_large_num increased to: " + std::to_string(temp_large_num));
-				}
-				else if (temp_original_energy1 == temp_predict_energy || temp_original_energy2 == temp_predict_energy)
-				{
-					temp_equal_num++;
-					log("    Original energy = predicted energy, temp_equal_num increased to: " + std::to_string(temp_equal_num));
-				}
-				else if (temp_original_energy1 < temp_predict_energy && temp_original_energy2 < temp_predict_energy)
-				{
-					temp_less_num++;
-					log("    Original energy < predicted energy, temp_less_num increased to: " + std::to_string(temp_less_num));
-				}
-			}
-			
-			log("\nCollapse energy calculation summary:");
-			log("  temp_large_num: " + std::to_string(temp_large_num) + 
-				", temp_equal_num: " + std::to_string(temp_equal_num) + 
-				", temp_less_num: " + std::to_string(temp_less_num) + 
-				", temp_boundary_num: " + std::to_string(temp_boundary_num));
-			log("  Total original energy: " + std::to_string(original_total_energy) + 
-				", total predicted energy: " + std::to_string(predict_total_energy) + 
-				", energy difference: " + std::to_string(original_total_energy - predict_total_energy));
-			
-			if (temp_boundary_num < 0)
-			{
-				log("Boundary energy check: temp_boundary_num < 0, not suitable for collapse, returning: " + std::to_string(cannot_collapse));
-				return -999;
-			}
-			else if (temp_large_num > 0)
-			{
-				log("Energy comparison check: temp_large_num > 0, suitable for collapse, returning final energy difference: " + std::to_string(original_total_energy - predict_total_energy));
+	
+				// 估计折叠能量比较结果
+				// log("  Estimating collapse energy"); // 注释掉
+				if (temp_original_energy1 > temp_predict_energy || temp_original_energy2 > temp_predict_energy) temp_large_num++;
+				else if (temp_original_energy1 == temp_predict_energy || temp_original_energy2 == temp_predict_energy) temp_equal_num++;
+				else if (temp_original_energy1 < temp_predict_energy && temp_original_energy2 < temp_predict_energy) temp_less_num++;
+				// log("    large/equal/less counts: " + ...); // 注释掉
+	
+			} // 结束遍历平行边对
+	
+			// log("\nCollapse energy calculation summary:"); // 注释掉
+			// ... (总结日志注释掉) ...
+	
+			// 最终决策
+			if (temp_boundary_num < 0) {
+				// log("Boundary energy check: temp_boundary_num < 0..."); // 注释掉
+				return cannot_collapse;
+			} else if (temp_large_num > 0) {
+				// log("Energy comparison check: temp_large_num > 0..."); // 注释掉
 				return original_total_energy - predict_total_energy;
-			}
-			else if (temp_less_num == 0)
-			{
-				log("Energy comparison check: temp_less_num = 0, suitable for collapse, returning final energy difference: " + std::to_string(original_total_energy - predict_total_energy));
+			} else if (temp_less_num == 0) { // 包括 temp_equal_num > 0 的情况
+				// log("Energy comparison check: temp_less_num = 0..."); // 注释掉
 				return original_total_energy - predict_total_energy;
-			}
-			else
-			{
-				log("Other cases, not suitable for collapse, returning: " + std::to_string(cannot_collapse));
+			} else { // temp_less_num > 0
+				// log("Other cases, not suitable for collapse..."); // 注释掉
 				return cannot_collapse;
 			}
 		}
 		catch (const std::exception& e) {
-			log("Exception occurred during collapse energy prediction: " + std::string(e.what()));
+			// log("Exception occurred during collapse energy prediction: " + ...); // 保留或注释掉
 			return cannot_collapse;
 		}
 		catch (...) {
-			log("Unknown exception occurred during collapse energy prediction");
+			// log("Unknown exception occurred during collapse energy prediction"); // 保留或注释掉
 			return cannot_collapse;
 		}
 	}
@@ -2050,7 +1856,6 @@ namespace HMeshLib
 	}
 
 	template <typename M>
-    // Add implementation if it's not already there, or modify existing one
     inline double sheet_operation<M>::get_sheet_on_feature_ratio(std::vector<E*> sheet)
     {
         if (sheet.empty()) {
@@ -2577,6 +2382,7 @@ namespace HMeshLib
             return {0.0, 0.0};
         }
     }
+
 	template <typename M>
 	inline int sheet_operation<M>::get_sheet_valence_along_path(const std::vector<E *> &sheet)
 	{
@@ -2750,123 +2556,97 @@ namespace HMeshLib
 		// 返回实际的最小距离
 		return std::sqrt(min_distance_sq);
 	}
-    template <typename M>
-    inline double sheet_operation<M>::get_distance_to_feature(const std::vector<E *> &sheet)
-    {
-		log("--- Entering get_distance_to_feature ---");
-		if (!mesh || sheet.empty()) {
-		   log("get_distance_to_feature: Error - Mesh pointer is null or input sheet is empty. Returning max distance.");
-           log("--- Exiting get_distance_to_feature ---");
-			return std::numeric_limits<double>::max();
-		}
-        // 假设 sheet 中的第一条有效边代表整个 sheet 的 ID
-        int representative_sheet_id = -1;
-        for(E* edge : sheet) {
-            if(edge) {
-                representative_sheet_id = edge->sheet();
-                break;
+
+	template <typename M>
+inline double sheet_operation<M>::get_distance_to_feature(const std::vector<E *> &sheet)
+{
+    // 函数开头不再包含检查 sheet 内部 sharp 边的循环
+
+    // log("--- Entering MODIFIED get_distance_to_feature (assumes sheet has no internal features) ---");
+
+    // 1. 基本输入检查
+    if (!mesh || sheet.empty()) {
+        // log("get_distance_to_feature: Error - Mesh pointer is null or input sheet is empty.");
+        return std::numeric_limits<double>::max();
+    }
+
+    // 2. 收集 sheet 自身的顶点 ID
+    std::set<int> sheet_vertex_ids;
+    std::set<int> sheet_edge_ids; // 仍然需要收集 edge_ids 用于下一步排除
+    for (E* e : sheet) {
+        if (!e || e->vs.size() != 2) continue;
+        sheet_edge_ids.insert(e->id());
+        sheet_vertex_ids.insert(e->vs[0]);
+        sheet_vertex_ids.insert(e->vs[1]);
+        // !!! 移除了这里的 if (e->sharp() > 0) return 0.0; 检查 !!!
+    }
+
+    // 如果 sheet 无有效顶点
+    if (sheet_vertex_ids.empty()){
+         // log("get_distance_to_feature: Error - Sheet contains no valid vertices.");
+         return std::numeric_limits<double>::max();
+    }
+
+    // 3. 收集网格中 *其他* sharp 边的顶点 ID
+    // log("  Step: Collecting vertices from *other* sharp edges...");
+    std::set<int> feature_vertex_ids;
+    for(auto const& [id, e_ptr] : mesh->m_map_edges) {
+        E* e_all = e_ptr;
+        if(!e_all || e_all->vs.size() != 2) continue;
+
+        if (e_all->sharp() > 0) {
+            // 确保这条 sharp 边 不属于 输入的 sheet
+            if (sheet_edge_ids.find(e_all->id()) == sheet_edge_ids.end()) {
+                feature_vertex_ids.insert(e_all->vs[0]);
+                feature_vertex_ids.insert(e_all->vs[1]);
             }
         }
-        log("get_distance_to_feature: Processing sheet (representative ID: " + (representative_sheet_id > 0 ? std::to_string(representative_sheet_id) : "N/A") + ") with " + std::to_string(sheet.size()) + " edges.");
-
-		std::set<int> sheet_vertex_ids;
-		std::set<int> sheet_edge_ids;
-		bool sheet_has_feature = false;
-
-		// 1. Collect sheet elements and check if sheet itself has feature edges
-		log("  Step 1: Collecting sheet elements and checking for internal features...");
-		for (E* e : sheet) {
-			if (!e || e->vs.size() != 2) {
-                 log("    Skipping invalid edge (ID: " + (e ? std::to_string(e->id()) : "null") + ")");
-                 continue;
-            }
-			sheet_edge_ids.insert(e->id());
-			sheet_vertex_ids.insert(e->vs[0]);
-			sheet_vertex_ids.insert(e->vs[1]);
-			if (e->sharp() > 0) { // Assuming sharp > 0 indicates a feature edge
-				sheet_has_feature = true;
-				log("  Sheet edge " + std::to_string(e->id()) + " is a feature edge. Distance = 0.0");
-                log("--- Exiting get_distance_to_feature ---");
-				return 0.0; // Sheet contains feature edge, distance is 0
-			}
-		}
-		log("  Collected " + std::to_string(sheet_vertex_ids.size()) + " unique vertices and " + std::to_string(sheet_edge_ids.size()) + " edges. Sheet has no internal feature edges.");
-
-		// 2. Collect all vertices belonging to *other* sharp edges
-		log("  Step 2: Collecting vertices from *other* sharp edges in the mesh...");
-		std::set<int> feature_vertex_ids;
-		int total_edges = 0;
-		int sharp_edge_count = 0;
-        int other_sharp_edge_count = 0;
-		for(auto const& [id, e_ptr] : mesh->m_map_edges) {
-			E* e_all = e_ptr;
-            if(!e_all) continue;
-			total_edges++;
-			if (e_all->sharp() > 0) {
-				 sharp_edge_count++;
-				// Check if this sharp edge is NOT part of the input sheet
-				if (sheet_edge_ids.find(e_all->id()) == sheet_edge_ids.end()) {
-                    other_sharp_edge_count++;
-					 if(e_all->vs.size() == 2) {
-						 feature_vertex_ids.insert(e_all->vs[0]);
-						 feature_vertex_ids.insert(e_all->vs[1]);
-                         // log("    Adding vertices " + std::to_string(e_all->vs[0]) + ", " + std::to_string(e_all->vs[1]) + " from other sharp edge " + std::to_string(e_all->id())); // 可选日志
-					 } else {
-                         log("    Warning: Other sharp edge " + std::to_string(e_all->id()) + " has invalid vertex count: " + std::to_string(e_all->vs.size()));
-                     }
-				}
-			}
-		}
-		log("  Found " + std::to_string(feature_vertex_ids.size()) + " vertices belonging to " + std::to_string(other_sharp_edge_count) + " other sharp edges (Total sharp edges: " + std::to_string(sharp_edge_count) + ", Total edges: " + std::to_string(total_edges) + ").");
-
-		// If there are no other feature edges, return large value
-		if (feature_vertex_ids.empty()) {
-			 log("  No other feature edges found in the mesh. Returning max distance.");
-             log("--- Exiting get_distance_to_feature ---");
-			return std::numeric_limits<double>::max();
-		}
-
-		// 3. Calculate minimum distance
-		log("  Step 3: Calculating minimum distance between sheet vertices and feature vertices...");
-		double min_distance_sq = std::numeric_limits<double>::max();
-        int sheet_vertex_processed = 0;
-        int feature_vertex_compared = 0;
-
-		for (int sv_id : sheet_vertex_ids) {
-			V* sv = mesh->idVertices(sv_id);
-			if (!sv){
-                 log("    Warning: Cannot find sheet vertex ID " + std::to_string(sv_id) + ". Skipping.");
-                 continue;
-            }
-            sheet_vertex_processed++;
-			CPoint sp = sv->position();
-            // log("    Processing sheet vertex " + std::to_string(sv_id)); // 可选
-
-			for (int fv_id : feature_vertex_ids) {
-				V* fv = mesh->idVertices(fv_id);
-				if (!fv){
-                    log("    Warning: Cannot find feature vertex ID " + std::to_string(fv_id) + ". Skipping.");
-                    continue;
-                }
-                feature_vertex_compared++;
-				CPoint fp = fv->position();
-				CPoint diff = sp - fp;
-				double dist_sq = diff * diff;
-                // log("      Comparing with feature vertex " + std::to_string(fv_id) + ", distance_sq = " + std::to_string(dist_sq)); // 可选
-				min_distance_sq = std::min(min_distance_sq, dist_sq);
-			}
-		}
-        log("  Processed " + std::to_string(sheet_vertex_processed) + " sheet vertices, performed " + std::to_string(feature_vertex_compared) + " comparisons.");
-
-		if (min_distance_sq == std::numeric_limits<double>::max()) {
-			 log("  Warning: Could not calculate any valid distances. Returning max distance.");
-             log("--- Exiting get_distance_to_feature ---");
-			 return std::numeric_limits<double>::max();
-		}
-
-		double min_distance = std::sqrt(min_distance_sq);
-		log("get_distance_to_feature: Calculation complete. Min distance = " + std::to_string(min_distance));
-        log("--- Exiting get_distance_to_feature ---");
-		return min_distance;
     }
+
+    // 如果网格中没有其他 feature edges
+    if (feature_vertex_ids.empty()) {
+        // log("  No other feature edges found in the mesh.");
+        return std::numeric_limits<double>::max(); // 返回极大值表示距离无限远
+    }
+
+    // 4. 计算 sheet 顶点 到 其他特征顶点 的最小非零距离
+    // log("  Step: Calculating minimum non-zero distance...");
+    double min_distance_sq = std::numeric_limits<double>::max();
+    const double ZERO_THRESHOLD_SQ = 1e-12; // 用于判断距离是否接近零的阈值（平方）
+
+    for (int sv_id : sheet_vertex_ids) {
+        V* sv = mesh->idVertices(sv_id);
+        if (!sv) continue; // 跳过无效顶点
+        CPoint sp = sv->position();
+
+        for (int fv_id : feature_vertex_ids) {
+            // 通常不需要比较 sv_id == fv_id，因为 feature_vertex_ids 是来自其他边的
+            V* fv = mesh->idVertices(fv_id);
+            if (!fv) continue; // 跳过无效顶点
+            CPoint fp = fv->position();
+            CPoint diff = sp - fp;
+            double dist_sq = diff * diff;
+
+            // 只考虑大于阈值的距离
+            if (dist_sq > ZERO_THRESHOLD_SQ) {
+                min_distance_sq = std::min(min_distance_sq, dist_sq);
+            }
+            // (可选) 如果需要记录发现零距离的情况可以在此添加日志
+            // else { log("    Ignoring near-zero distance between sheet vertex " + ...); }
+        }
+    }
+
+    // 处理没有找到有效非零距离的情况
+    if (min_distance_sq == std::numeric_limits<double>::max()) {
+         // log("  Warning: Could not calculate any valid *non-zero* distances.");
+         // 根据策略决定返回值，这里返回极大值
+         return std::numeric_limits<double>::max();
+    }
+
+    // 5. 返回最终结果
+    double min_distance = std::sqrt(min_distance_sq);
+    // log("get_distance_to_feature: Calculation complete. Min non-zero distance = " + std::to_string(min_distance));
+    // log("--- Exiting MODIFIED get_distance_to_feature ---");
+    return min_distance;
+	}
 }
