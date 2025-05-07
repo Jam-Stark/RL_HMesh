@@ -16,7 +16,14 @@ from utils import ReplayMemory
 import network
 
 class Agent:
-    def __init__(self, eta=0.5, gamma=0.99, capacity=100000, batch_size=32, episode=0, use_geometric_features=True):
+    def __init__(self, eta=0.5, gamma=0.99, capacity=100000, batch_size=32, episode=0,
+                 use_geometric_features=True,
+                 # --- 新增/修改: 使超参数可配置 ---
+                 max_steps_per_episode=500,
+                 reward_threshold_to_stop=150.0,
+                 no_improvement_steps_threshold=50,
+                 improvement_tolerance=1.0):
+
         self.rewards = []
         self.eta = eta
         self.gamma = gamma
@@ -24,6 +31,27 @@ class Agent:
         self.batch_size = batch_size
         self.episode = episode
         self.memory = ReplayMemory(self.capacity)
+
+        self.target_update_freq = 10
+        self.updates_count = 0
+        self.error_filter_threshold = 0.05
+        self.max_filter_threshold = 0.95
+        self.filter_increase_rate = 0.01
+        self.total_episodes = 0
+        self.error_encounter_count = 0
+
+        # --- 新增/修改: 存储超参数 ---
+        self.max_steps_per_episode = max_steps_per_episode
+        self.reward_threshold_to_stop = reward_threshold_to_stop
+        self.no_improvement_steps_threshold = no_improvement_steps_threshold
+        self.improvement_tolerance = improvement_tolerance
+
+        # --- 新增: 每个 episode 需要重置的变量 ---
+        self.current_episode_reward = 0.0
+        self.current_episode_steps = 0
+        self.best_reward_this_episode = -float('inf')
+        self.steps_since_last_improvement = 0
+        # --- 结束新增/修改 ---
         
         # 检测CUDA设备
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -113,17 +141,33 @@ class Agent:
             print("检查点加载不完整或失败")
             return False
             
-    def remember(self, state, action, next_state, reward, is_error=False):
-        """存储经验，带有错误标记参数"""
-        # 如果奖励值非常低（比如 -100000），则认为是非法动作的严厉惩罚
-        if reward < -50000:
+    def remember(self, state, action, next_state, single_step_reward, is_error=False):
+        # --- 检查是否为严重错误 (可以保留或调整) ---
+        if single_step_reward < -50000: # 使用传入的单步奖励判断
             is_error = True
             self.error_encounter_count += 1
             print(f"检测到严重错误，增加记忆优先级。错误计数：{self.error_encounter_count}")
-        
-        # 为错误记忆设置较高的优先级
-        priority = 2.0 if is_error else None
-        self.memory.push((state, action, next_state, reward, is_error), priority)
+        priority = 2.0 if is_error else None # 优先级基于是否错误
+
+        # --- 存储经验到 ReplayMemory ---
+        # 注意：这里传递给 memory 的事件元组可能也需要调整，
+        # 如果 memory 内部使用了 reward 来定优先级，确保它理解这是单步奖励
+        # 或者直接使用这里计算的 priority
+        self.memory.push((state, action, next_state, single_step_reward, is_error), priority) # 存储单步奖励
+
+        # --- 新增/修改: 更新 episode 状态 ---
+        self.current_episode_steps += 1  # 在这里增加步数计数
+        self.current_episode_reward += single_step_reward # 累加单步奖励
+
+        # 检查奖励是否有显著改善
+        if self.current_episode_reward > self.best_reward_this_episode + self.improvement_tolerance:
+            # print(f"  Improvement detected: {self.best_reward_this_episode:.2f} -> {self.current_episode_reward:.2f}") # Debug log
+            self.best_reward_this_episode = self.current_episode_reward
+            self.steps_since_last_improvement = 0 # 重置计数器
+        else:
+            self.steps_since_last_improvement += 1 # 没有显著改善，增加计数器
+            # print(f"  No significant improvement for {self.steps_since_last_improvement} steps.") # Debug log
+        # --- 结束新增/修改 ---
 
     def extract_features(self, state):
         """从完整state中提取几何特征"""
@@ -149,6 +193,14 @@ class Agent:
                 features.append([item[1]] + [0.0] * 9)  # 只使用energy，其他填充0
                 
         return features, ids
+    
+    def reset_episode_stats(self):
+        """在每个episode开始时调用，重置统计信息"""
+        self.current_episode_reward = 0.0
+        self.current_episode_steps = 0
+        self.best_reward_this_episode = -float('inf')
+        self.steps_since_last_improvement = 0
+        print("Episode stats reset.") # 添加日志确认
 
     def should_filter_error(self, episode):
         """根据训练进度决定是否过滤非法动作"""
@@ -488,9 +540,33 @@ class Agent:
                 print(f"学习率已更新为: {self.optimizer.param_groups[0]['lr']}")
                 print(f"当前错误过滤阈值: {self.error_filter_threshold:.2f}, 总训练回合数: {self.total_episodes}")
 
-    def is_finish(self, state):
-        #print("is_finish running")
-        return not all(row[1] <= 0 for row in state) #if state can not continue, return True, so add "not" here
+    def is_finish(self, state): # state 参数用于能量检查
+        """
+        检查 episode 是否应该终止。
+        返回 False 表示终止，True 表示继续。
+        """
+        # 1. 检查是否达到最大步数
+        if self.current_episode_steps >= self.max_steps_per_episode:
+            print(f"Episode finished: Reached max steps ({self.current_episode_steps}/{self.max_steps_per_episode}).")
+            return False # 终止
+
+        # 2. 检查累计奖励是否达到目标阈值
+        if self.current_episode_reward >= self.reward_threshold_to_stop:
+            print(f"Episode finished: Cumulative reward ({self.current_episode_reward:.2f}) reached threshold ({self.reward_threshold_to_stop:.2f}).")
+            return False # 终止
+
+        # 3. 检查是否长时间没有显著改善
+        if self.steps_since_last_improvement >= self.no_improvement_steps_threshold:
+            print(f"Episode finished: No significant reward improvement for {self.steps_since_last_improvement} steps (threshold: {self.no_improvement_steps_threshold}).")
+            return False # 终止
+
+        # 4. (可选，但推荐保留) 检查是否已无合法动作（所有 sheet 能量 <= 0）
+        if not state or all(row[1] <= 0 for row in state): # state[0] 是 sheet_id, state[1] 是 energy
+             print(f"Episode finished: No sheets with positive energy remaining or state is empty.")
+             return False # 终止
+
+        # 5. 如果以上条件都不满足，则继续
+        return True # 继续
 
     def find_sheet_id(self, state, action):
         for i, row in enumerate(state):

@@ -88,7 +88,8 @@
         "coroutine": "cpp",
         "resumable": "cpp",
         "mprealsupport": "cpp",
-        "nonlinearoptimization": "cpp"
+        "nonlinearoptimization": "cpp",
+        "cstdarg": "cpp"
     },
     "cmake.sourceDirectory": "F:/RL_HMesh",
     "cmake.generator": "Visual Studio 17 2022",
