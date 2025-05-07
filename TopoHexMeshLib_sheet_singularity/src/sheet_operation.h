@@ -337,7 +337,7 @@ namespace HMeshLib
 	void sheet_operation<M>::mark_elements_attribute_collapse(std::vector<F*> fs)
 	{
 		try {
-			log("Starting to mark element attributes, processing faces count: " + std::to_string(fs.size()));
+			//log("Starting to mark element attributes, processing faces count: " + std::to_string(fs.size()));
 	
 			// 检查输入参数
 			if (fs.empty()) {
@@ -686,7 +686,7 @@ namespace HMeshLib
 				}
 			}
 	
-			log("Element attribute marking completed");
+			//log("Element attribute marking completed");
 		}
 		catch (const std::exception& e) {
 			log("Major exception in mark_elements_attribute_collapse: " + std::string(e.what()));
@@ -699,7 +699,7 @@ namespace HMeshLib
 	template<typename M>
 	void sheet_operation<M>::collapse_one_sheet2(std::vector<E*> sheet)
 	{
-		log("Starting to process sheet, size: " + std::to_string(sheet.size()));
+		//log("Starting to process sheet, size: " + std::to_string(sheet.size()));
 		/*get all the hexs and the include elements*/
 		std::set<H*> delete_hs;//get all hex in sheet
 		std::set<F*> delete_fs;//delete faces
@@ -750,10 +750,10 @@ namespace HMeshLib
 				}
 			}
 		}
-		log("Collected elements to delete - Hexes: " + std::to_string(delete_hs.size()) +
-			", Faces: " + std::to_string(delete_fs.size()) +
-			", Edges: " + std::to_string(delete_es.size()) +
-			", Vertices: " + std::to_string(delete_vs.size()));
+		// log("Collected elements to delete - Hexes: " + std::to_string(delete_hs.size()) +
+		// 	", Faces: " + std::to_string(delete_fs.size()) +
+		// 	", Edges: " + std::to_string(delete_es.size()) +
+		// 	", Vertices: " + std::to_string(delete_vs.size()));
 	
 		/*exit if there is self-intersection*/
 		for (std::set<H*>::iterator hite = delete_hs.begin(); hite != delete_hs.end(); hite++)
@@ -771,7 +771,7 @@ namespace HMeshLib
 			}
 			if (count > 4)
 			{
-				log("Self-intersection detected at hex id: " + std::to_string(h->id()) + ". Aborting collapse.");
+				//log("Self-intersection detected at hex id: " + std::to_string(h->id()) + ". Aborting collapse.");
 				std::cout << "The current sheet has self-intersection" << std::endl;
 	
 				// 清除之前设置的is_delete标记，因为我们不会继续折叠
@@ -793,7 +793,7 @@ namespace HMeshLib
 		std::vector<E*> newes;
 		std::vector<F*> newfs;
 		/*add new vertices*/
-		log("Starting new vertex creation and topology update");
+		//log("Starting new vertex creation and topology update");
 		for (int eIndex = 0; eIndex < sheet.size(); eIndex++)
 		{
 			E* e = sheet[eIndex];
@@ -805,7 +805,7 @@ namespace HMeshLib
 			V* ev1 = mesh->idVertices(e->vs[0]);
 			V* ev2 = mesh->idVertices(e->vs[1]);
 			if (!ev1 || !ev2) {
-				log("Error: Could not find vertices for edge " + std::to_string(e->id()) + ". Skipping topology update for this edge.");
+				//log("Error: Could not find vertices for edge " + std::to_string(e->id()) + ". Skipping topology update for this edge.");
 				continue; // Skip if original vertices are missing
 			}
 			vertex_position_policy(ev1, ev2, newv);
@@ -862,10 +862,10 @@ namespace HMeshLib
 				}
 			}
 		}
-		log("Vertex creation and topology update completed. New vertices: " + std::to_string(newvs.size()));
+		//log("Vertex creation and topology update completed. New vertices: " + std::to_string(newvs.size()));
 	
 		/*create new edges and faces*/
-		log("Starting new edge/face creation");
+		//log("Starting new edge/face creation");
 		for (std::set<H*>::iterator hite = delete_hs.begin(); hite != delete_hs.end(); hite++)
 		{
 			H* h = *hite;
@@ -1012,7 +1012,7 @@ namespace HMeshLib
 	
 	
 		// --- Optimized Deletion ---
-		log("Starting deletion operations");
+		//log("Starting deletion operations");
 	
 		// 1. Erase from maps using the collected pointers/IDs
 		int deleted_hexes_map = 0;
@@ -1021,7 +1021,7 @@ namespace HMeshLib
 				deleted_hexes_map++;
 			}
 		}
-		log("Removed " + std::to_string(deleted_hexes_map) + " hex entries from map");
+		//log("Removed " + std::to_string(deleted_hexes_map) + " hex entries from map");
 	
 		int deleted_faces_map = 0;
 		for (F* f : delete_fs) {
@@ -1029,7 +1029,7 @@ namespace HMeshLib
 				deleted_faces_map++;
 			}
 		}
-		 log("Removed " + std::to_string(deleted_faces_map) + " face entries from map");
+		 //log("Removed " + std::to_string(deleted_faces_map) + " face entries from map");
 	
 		int deleted_edges_map = 0;
 		for (E* e : delete_es) {
@@ -1037,7 +1037,7 @@ namespace HMeshLib
 				deleted_edges_map++;
 			}
 		}
-		log("Removed " + std::to_string(deleted_edges_map) + " edge entries from map");
+		//log("Removed " + std::to_string(deleted_edges_map) + " edge entries from map");
 	
 		int deleted_vertices_map = 0;
 		for (V* v : delete_vs) {
@@ -1045,7 +1045,7 @@ namespace HMeshLib
 				deleted_vertices_map++;
 			}
 		}
-		log("Removed " + std::to_string(deleted_vertices_map) + " vertex entries from map");
+		//log("Removed " + std::to_string(deleted_vertices_map) + " vertex entries from map");
 	
 	
 		// 2. Remove from lists using the pointer sets and delete objects
@@ -1059,7 +1059,7 @@ namespace HMeshLib
 			}
 			return false;
 		});
-		log("Deleted " + std::to_string(deleted_hexes_list) + " hexahedra objects and list entries");
+		//log("Deleted " + std::to_string(deleted_hexes_list) + " hexahedra objects and list entries");
 	
 		int deleted_faces_list = 0;
 		mesh->fs.remove_if([&delete_fs, &deleted_faces_list](F* f) {
@@ -1071,7 +1071,7 @@ namespace HMeshLib
 			}
 			return false;
 		});
-		log("Deleted " + std::to_string(deleted_faces_list) + " face objects and list entries");
+		//log("Deleted " + std::to_string(deleted_faces_list) + " face objects and list entries");
 	
 		int deleted_edges_list = 0;
 		mesh->es.remove_if([&delete_es, &deleted_edges_list](E* e) {
@@ -1083,7 +1083,7 @@ namespace HMeshLib
 			}
 			return false;
 		});
-		 log("Deleted " + std::to_string(deleted_edges_list) + " edge objects and list entries");
+		 //log("Deleted " + std::to_string(deleted_edges_list) + " edge objects and list entries");
 	
 		int deleted_vertices_list = 0;
 		mesh->vs.remove_if([&delete_vs, &deleted_vertices_list](V* v) {
@@ -1095,16 +1095,16 @@ namespace HMeshLib
 			}
 			return false;
 		});
-		log("Deleted " + std::to_string(deleted_vertices_list) + " vertex objects and list entries");
+		//log("Deleted " + std::to_string(deleted_vertices_list) + " vertex objects and list entries");
 	
-		log("Deletion operations completed");
+		//log("Deletion operations completed");
 		// 检查mesh 的 vertexes, edges, faces, hexs 的数量是否正确
-		log("Mesh vertex count: " + std::to_string(mesh->vs.size()));
-		log("Mesh edge count: " + std::to_string(mesh->es.size()));
-		log("Mesh face count: " + std::to_string(mesh->fs.size()));
-		log("Mesh hexahedron count: " + std::to_string(mesh->hs.size()));
-		log("Sheet collapse execution completed");
-	}
+		//log("Mesh vertex count: " + std::to_string(mesh->vs.size()));
+		//log("Mesh edge count: " + std::to_string(mesh->es.size()));
+		//log("Mesh face count: " + std::to_string(mesh->fs.size()));
+		//log("Mesh hexahedron count: " + std::to_string(mesh->hs.size()));
+		//log("Sheet collapse execution completed");
+	};
 
 	template<typename M>
 	double sheet_operation<M>::vector_angle(CPoint a, CPoint b)
@@ -1858,14 +1858,14 @@ namespace HMeshLib
 	template <typename M>
     inline double sheet_operation<M>::get_sheet_on_feature_ratio(std::vector<E*> sheet)
     {
-        if (sheet.empty()) {
-            log("get_sheet_on_feature_ratio: Warning - Input sheet is empty.");
-            return 0.0;
-        }
+        // if (sheet.empty()) {
+        //     //log("get_sheet_on_feature_ratio: Warning - Input sheet is empty.");
+        //     return 0.0;
+        // }
 
         // Assuming the first edge's sheet ID represents the whole sheet for logging
         int representative_sheet_id = sheet[0] ? sheet[0]->sheet() : -1;
-        log("get_sheet_on_feature_ratio: Calculating for Sheet ID (representative) " + std::to_string(representative_sheet_id) + " with " + std::to_string(sheet.size()) + " edges.");
+        //log("get_sheet_on_feature_ratio: Calculating for Sheet ID (representative) " + std::to_string(representative_sheet_id) + " with " + std::to_string(sheet.size()) + " edges.");
 
         int is_feature_count = 0;
         int processed_count = 0;
@@ -1873,31 +1873,31 @@ namespace HMeshLib
         {
             E* e = sheet[i];
             if (!e) {
-                log("  get_sheet_on_feature_ratio: Skipping null edge pointer at index " + std::to_string(i));
+                //log("  get_sheet_on_feature_ratio: Skipping null edge pointer at index " + std::to_string(i));
                 continue;
             }
             processed_count++;
             int sharp_value = e->sharp(); // Read the value once
 
             // Log every edge's sharp value for debugging
-            log("  get_sheet_on_feature_ratio: Checking Edge ID " + std::to_string(e->id()) + ", sharp() = " + std::to_string(sharp_value));
+            //log("  get_sheet_on_feature_ratio: Checking Edge ID " + std::to_string(e->id()) + ", sharp() = " + std::to_string(sharp_value));
 
             // The check should likely be for non-zero sharp value
             if (sharp_value > 0) // Check if sharp value indicates it's a feature
             {
                 is_feature_count++;
-                log("    -> Edge ID " + std::to_string(e->id()) + " counted as feature.");
+                //log("    -> Edge ID " + std::to_string(e->id()) + " counted as feature.");
             }
         }
 
         if (processed_count == 0) {
-             log("get_sheet_on_feature_ratio: Warning - No valid edges processed in the sheet.");
+             //log("get_sheet_on_feature_ratio: Warning - No valid edges processed in the sheet.");
              return 0.0;
         }
 
         // Ensure floating point division
         double ratio = static_cast<double>(is_feature_count) / static_cast<double>(processed_count);
-        log("get_sheet_on_feature_ratio: Calculation complete for Sheet ID " + std::to_string(representative_sheet_id) + ". Feature count = " + std::to_string(is_feature_count) + ", Processed edges = " + std::to_string(processed_count) + ", Ratio = " + std::to_string(ratio));
+       // log("get_sheet_on_feature_ratio: Calculation complete for Sheet ID " + std::to_string(representative_sheet_id) + ". Feature count = " + std::to_string(is_feature_count) + ", Processed edges = " + std::to_string(processed_count) + ", Ratio = " + std::to_string(ratio));
 
         return ratio;
     	}
@@ -1994,7 +1994,7 @@ namespace HMeshLib
 	int sheet_operation<M>::get_sheet_adjacent_feature_edges_count(std::vector<E*> sheet)
         {
              if (sheet.empty()) {
-                 log("Warning: get_sheet_adjacent_feature_edges_count called with empty sheet.");
+                 //log("Warning: get_sheet_adjacent_feature_edges_count called with empty sheet.");
                  return 0;
              }
 
@@ -2035,11 +2035,11 @@ namespace HMeshLib
                      if (neighbor_e->sharp() > 0) { // Assuming sharp > 0 means it's a feature edge
                          total_adjacent_feature_count++;
                          counted_feature_edge_ids.insert(neighbor_eid); // Mark as counted
-                         log("Adjacent feature edge found: ID " + std::to_string(neighbor_e->id()) + " connected to sheet vertex ID " + std::to_string(vid));
+                         //log("Adjacent feature edge found: ID " + std::to_string(neighbor_e->id()) + " connected to sheet vertex ID " + std::to_string(vid));
                      }
                  }
              }
-             log("Total adjacent feature edges count for sheet: " + std::to_string(total_adjacent_feature_count));
+             //log("Total adjacent feature edges count for sheet: " + std::to_string(total_adjacent_feature_count));
              return total_adjacent_feature_count;
         }
     template <typename M>
@@ -2050,7 +2050,7 @@ namespace HMeshLib
         }
 
         try {
-            log("计算Sheet曲率度量(Curvature Metric)...");
+            //log("计算Sheet曲率度量(Curvature Metric)...");
 
             // 方法1：计算端点之间的欧氏距离与路径几何长度的比值
             // 获取sheet两端顶点
@@ -2059,7 +2059,7 @@ namespace HMeshLib
 
             // 检查边是否有效
             if (!first_edge || !last_edge || first_edge->vs.size() < 2 || last_edge->vs.size() < 2) {
-                log("警告: Sheet端点边无效");
+                //log("警告: Sheet端点边无效");
                 return 0.0;
             }
 
@@ -2069,7 +2069,7 @@ namespace HMeshLib
 
             // 确保能找到两端顶点
             if (!start_v || !end_v) {
-                log("警告: 无法获取sheet端点顶点");
+               // log("警告: 无法获取sheet端点顶点");
                 return 0.0;
             }
 
@@ -2094,25 +2094,25 @@ namespace HMeshLib
             }
 
             if (total_length < 1e-10) {
-                log("警告: Sheet总长度接近零");
+                //log("警告: Sheet总长度接近零");
                 return 0.0;
             }
 
             // 计算曲率度量 - 值接近1表示直线，值越小表示越弯曲
             double curvature_metric = euclidean_distance / total_length;
             
-            log("Sheet曲率度量: " + std::to_string(curvature_metric) + 
-                " (欧氏距离: " + std::to_string(euclidean_distance) + 
-                ", 总路径长度: " + std::to_string(total_length) + ")");
+            // log("Sheet曲率度量: " + std::to_string(curvature_metric) + 
+            //     " (欧氏距离: " + std::to_string(euclidean_distance) + 
+            //     ", 总路径长度: " + std::to_string(total_length) + ")");
             
             return curvature_metric; // 0~1之间的值，接近1表示sheet接近直线，值越小表示sheet越弯曲
         }
         catch (const std::exception& e) {
-            log("计算sheet曲率度量时发生异常: " + std::string(e.what()));
+            log("Exception occurred when computing curvature: " + std::string(e.what()));
             return 0.0;
         }
         catch (...) {
-            log("计算sheet曲率度量时发生未知异常");
+            log("Unknown exception occurred when computing curvature, returning 0.0");
             return 0.0;
         }
     }
@@ -2124,7 +2124,7 @@ namespace HMeshLib
         }
 
         try {
-            log("Computing sheet normal variation...");
+            //log("Computing sheet normal variation...");
 
             // Calculate normal variation by measuring angle changes between adjacent face normals
             double total_normal_variation = 0.0;
@@ -2178,8 +2178,8 @@ namespace HMeshLib
             double average_variation = (valid_measurements > 0) ? 
                 (total_normal_variation / valid_measurements) : 0.0;
             
-            log("Sheet normal variation: " + std::to_string(average_variation) + 
-                " degrees (based on " + std::to_string(valid_measurements) + " measurements)");
+            // log("Sheet normal variation: " + std::to_string(average_variation) + 
+            //     " degrees (based on " + std::to_string(valid_measurements) + " measurements)");
             
             return average_variation; //度数，值越大表示面法线变化越剧烈，通常意味着区域曲率越高
         }
@@ -2200,7 +2200,7 @@ namespace HMeshLib
         }
 
         try {
-            log("Computing sheet dihedral angle deviation...");
+            //log("Computing sheet dihedral angle deviation...");
             
             double total_deviation = 0.0;
             int valid_measurements = 0;
@@ -2230,10 +2230,10 @@ namespace HMeshLib
                     deviation = 360.0 - deviation;
                 }
                 
-                log("  Edge " + std::to_string(e->id()) + 
-                    " - actual angle: " + std::to_string(actual_angle) + 
-                    ", ideal angle: " + std::to_string(ideal_angle) + 
-                    ", deviation: " + std::to_string(deviation));
+                // log("  Edge " + std::to_string(e->id()) + 
+                //     " - actual angle: " + std::to_string(actual_angle) + 
+                //     ", ideal angle: " + std::to_string(ideal_angle) + 
+                //     ", deviation: " + std::to_string(deviation));
                 
                 total_deviation += deviation;
                 valid_measurements++;
@@ -2243,8 +2243,8 @@ namespace HMeshLib
             double average_deviation = (valid_measurements > 0) ? 
                 (total_deviation / valid_measurements) : 0.0;
             
-            log("Sheet dihedral angle deviation: " + std::to_string(average_deviation) + 
-                " degrees (based on " + std::to_string(valid_measurements) + " measurements)");
+            // log("Sheet dihedral angle deviation: " + std::to_string(average_deviation) + 
+            //     " degrees (based on " + std::to_string(valid_measurements) + " measurements)");
             
             return average_deviation; //度数，值越大表示二面角偏离理想值越远，通常意味着网格畸变更严重
         }
@@ -2265,7 +2265,7 @@ namespace HMeshLib
         }
 
         try {
-            log("Computing sheet adjacent hexahedra scaled Jacobian...");
+            //log("Computing sheet adjacent hexahedra scaled Jacobian...");
             
             // 用于计算缩放雅可比行列式的辅助函数
             auto calculate_scaled_jacobian = [](H* hex, M* mesh) -> double {
@@ -2340,7 +2340,7 @@ namespace HMeshLib
                 }
             }
             
-            log("Found " + std::to_string(adjacent_hex_ids.size()) + " adjacent hexahedra to evaluate");
+            //log("Found " + std::to_string(adjacent_hex_ids.size()) + " adjacent hexahedra to evaluate");
             
             // 计算所有相邻六面体的缩放雅可比行列式
             std::vector<double> jacobian_values;
@@ -2356,7 +2356,7 @@ namespace HMeshLib
             
             // 计算最小值和平均值
             if (jacobian_values.empty()) {
-                log("No valid Jacobian values calculated");
+                //log("No valid Jacobian values calculated");
                 return {0.0, 0.0};
             }
             
@@ -2367,9 +2367,9 @@ namespace HMeshLib
             }
             avg_jacobian /= jacobian_values.size();
             
-            log("Sheet adjacent hexahedra - Minimum scaled Jacobian: " + std::to_string(min_jacobian) + 
-                ", Average scaled Jacobian: " + std::to_string(avg_jacobian) + 
-                " (based on " + std::to_string(jacobian_values.size()) + " hexahedra)");
+            // log("Sheet adjacent hexahedra - Minimum scaled Jacobian: " + std::to_string(min_jacobian) + 
+            //     ", Average scaled Jacobian: " + std::to_string(avg_jacobian) + 
+            //     " (based on " + std::to_string(jacobian_values.size()) + " hexahedra)");
             
             return {min_jacobian, avg_jacobian};
         }

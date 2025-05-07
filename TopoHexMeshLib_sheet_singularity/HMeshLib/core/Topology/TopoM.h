@@ -175,6 +175,25 @@ namespace HMeshLib
 		void compute_sharp_edges(double threshold_degrees);
 		void compute_features_and_corners(double sharp_threshold_degrees);
 
+		void compute_features()
+		{
+					//mark boundary
+		mark_boundary();
+		singularities = mark_singularity();
+		/*compute the face normal*/
+		computeNormal();
+
+		for (std::list<E*>::iterator eite = this->es.begin(); eite != this->es.end(); eite++) {
+
+			if (*eite)
+            	this->edge_angle(*eite);
+            
+		}
+		compute_sharp_edges(30.0);
+
+		compute_features_and_corners(30.0);
+		}
+
 		int count_sharp_edges()
 		{
 			int sharp_count = 0;
@@ -222,6 +241,147 @@ namespace HMeshLib
 					boundary_count++;
 			}
 			return boundary_count;
+		}
+
+		topoM& operator=(const topoM& other) {
+			if (this == &other) {
+				return *this; // 处理自赋值
+			}
+	
+			// 1. 清理当前对象的状态 (释放旧内存)
+			this->_clear(); // 你已有的清理函数
+	
+			// 2. 复制简单成员变量 (同拷贝构造函数)
+			m_nVertices = other.m_nVertices;
+			m_nHexs = other.m_nHexs;
+			m_nSharpEdges = other.m_nSharpEdges;
+			m_nCorners = other.m_nCorners;
+			m_nFaces = other.m_nFaces;
+			m_maxVertexId = other.m_maxVertexId;
+			m_maxEdgeId = other.m_maxEdgeId;
+			m_maxFaceId = other.m_maxFaceId;
+			m_maxHexId = other.m_maxHexId;
+	
+			// 3. 创建拓扑元素的深拷贝并建立映射 (同拷贝构造函数)
+			std::unordered_map<int, V*> old_v_to_new_v;
+			std::unordered_map<int, E*> old_e_to_new_e;
+			std::unordered_map<int, F*> old_f_to_new_f;
+			std::unordered_map<int, H*> old_h_to_new_h;
+	
+			// 3a. 拷贝顶点
+			for (const auto& pair : other.m_map_vertices) {
+				const V* old_v = pair.second;
+				if (!old_v) continue;
+				V* new_v = new V(*old_v);
+				new_v->neighbor_es.clear(); 
+				new_v->neighbor_fs.clear();
+				new_v->neighbor_hs.clear();
+				this->vs.push_back(new_v);
+				this->m_map_vertices[new_v->id()] = new_v;
+				old_v_to_new_v[old_v->id()] = new_v;
+			}
+			// 3b. 拷贝边
+			for (const auto& pair : other.m_map_edges) {
+				const E* old_e = pair.second;
+				if (!old_e) continue;
+				E* new_e = new E(*old_e);
+				new_e->neighbor_fs.clear();
+				new_e->neighbor_hs.clear();
+				this->es.push_back(new_e);
+				this->m_map_edges[new_e->id()] = new_e;
+				old_e_to_new_e[old_e->id()] = new_e;
+			}
+			// 3c. 拷贝面
+			for (const auto& pair : other.m_map_faces) {
+				const F* old_f = pair.second;
+				if (!old_f) continue;
+				F* new_f = new F(*old_f);
+				new_f->neighbor_hs.clear();
+				this->fs.push_back(new_f);
+				this->m_map_faces[new_f->id()] = new_f;
+				old_f_to_new_f[old_f->id()] = new_f;
+			}
+			// 3d. 拷贝六面体
+			for (const auto& pair : other.m_map_hexs) {
+				const H* old_h = pair.second;
+				if (!old_h) continue;
+				H* new_h = new H(*old_h);
+				this->hs.push_back(new_h);
+				this->m_map_hexs[new_h->id()] = new_h;
+				old_h_to_new_h[old_h->id()] = new_h;
+			}
+	
+			// 4. 重建邻接关系 (同拷贝构造函数中的步骤 3)
+			// 4a. 更新顶点的邻接列表
+			for (V* new_v : this->vs) {
+				const V* old_v = nullptr;
+				auto it_old_v = other.m_map_vertices.find(new_v->id());
+				if (it_old_v != other.m_map_vertices.end()) {
+					old_v = it_old_v->second;
+					 if (old_v) {
+						for (int old_eid : old_v->neighbor_es) {
+							if (old_e_to_new_e.count(old_eid)) {
+							   new_v->neighbor_es.push_back(old_eid);
+							}
+						}
+						for (int old_fid : old_v->neighbor_fs) {
+							if (old_f_to_new_f.count(old_fid)) {
+							   new_v->neighbor_fs.push_back(old_fid);
+							}
+						}
+						for (int old_hid : old_v->neighbor_hs) {
+							if (old_h_to_new_h.count(old_hid)) {
+							   new_v->neighbor_hs.push_back(old_hid);
+							}
+						}
+					}
+				}
+			}
+			// 4b. 更新边的邻接列表
+			 for (E* new_e : this->es) {
+				const E* old_e = nullptr;
+				auto it_old_e = other.m_map_edges.find(new_e->id());
+				if (it_old_e != other.m_map_edges.end()) {
+					old_e = it_old_e->second;
+					 if (old_e) {
+						for (int old_fid : old_e->neighbor_fs) {
+							 if (old_f_to_new_f.count(old_fid)) {
+								new_e->neighbor_fs.push_back(old_fid);
+							 }
+						}
+						for (int old_hid : old_e->neighbor_hs) {
+							if (old_h_to_new_h.count(old_hid)) {
+								new_e->neighbor_hs.push_back(old_hid);
+							}
+						}
+					}
+				}
+			}
+			// 4c. 更新面的邻接列表
+			for (F* new_f : this->fs) {
+				const F* old_f = nullptr;
+				auto it_old_f = other.m_map_faces.find(new_f->id());
+				if (it_old_f != other.m_map_faces.end()) {
+					old_f = it_old_f->second;
+					if (old_f) {
+						for (int old_hid : old_f->neighbor_hs) {
+							if (old_h_to_new_h.count(old_hid)) {
+								new_f->neighbor_hs.push_back(old_hid);
+							}
+						}
+					}
+				}
+			}
+	
+			// 5. 复制奇异线列表 (同拷贝构造函数)
+			singularities.clear();
+			for (E* old_sing_e : other.singularities) {
+				 if (old_sing_e && old_e_to_new_e.count(old_sing_e->id())) {
+					this->singularities.push_back(old_e_to_new_e[old_sing_e->id()]);
+				}
+			}
+	
+			return *this;
 		}
 
 	protected:
@@ -1684,22 +1844,8 @@ namespace HMeshLib
 		}
 
 		is.close();
-		//mark boundary
-		mark_boundary();
-		singularities = mark_singularity();
-		/*compute the face normal*/
-		computeNormal();
 
-		for (std::list<E*>::iterator eite = this->es.begin(); eite != this->es.end(); eite++) {
-
-			if (*eite)
-            	this->edge_angle(*eite);
-            
-		}
-		compute_sharp_edges(30.0);
-
-		compute_features_and_corners(30.0);
-
+		compute_features();
 		// print_hexs_map();
 		// print_faces_map();
 		// print_edges_map();
@@ -1722,44 +1868,44 @@ namespace HMeshLib
 		};
 
 		try {
-			logFunc("Starting write_Qhex to file: " + std::string(output));
+			//logFunc("Starting write_Qhex to file: " + std::string(output));
 			
 			// 准备要写入的数据
-			logFunc("Preparing data for output - converting to string format");
+			//logFunc("Preparing data for output - converting to string format");
 			for (std::list<V*>::iterator vite = vs.begin(); vite != vs.end(); vite++)
 			{
 				V* v = *vite;
 				v->_to_string();
 			}
-			logFunc("Vertices data prepared: " + std::to_string(vs.size()) + " vertices");
+			//logFunc("Vertices data prepared: " + std::to_string(vs.size()) + " vertices");
 			
 			for (std::list<E*>::iterator eite = es.begin(); eite != es.end(); eite++)
 			{
 				E* e = *eite;
 				e->_to_string();
 			}
-			logFunc("Edges data prepared: " + std::to_string(es.size()) + " edges");
+			//logFunc("Edges data prepared: " + std::to_string(es.size()) + " edges");
 			
 			for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
 			{
 				H* h = *hite;
 				h->_to_string();
 			}
-			logFunc("Hexes data prepared: " + std::to_string(hs.size()) + " hexes");
+			//logFunc("Hexes data prepared: " + std::to_string(hs.size()) + " hexes");
 
 			// 打开输出文件
-			logFunc("Opening output file: " + std::string(output));
+			//logFunc("Opening output file: " + std::string(output));
 			std::fstream _os(output, std::fstream::out);
 
 			if (_os.fail())
 			{
-				logFunc("ERROR: Failed to open output file: " + std::string(output));
+				//logFunc("ERROR: Failed to open output file: " + std::string(output));
 				fprintf(stderr, "Error in opening file %s\n", output);
 				return;
 			}
 			
 			// 输出顶点数据
-			logFunc("Writing vertices data to file...");
+			//logFunc("Writing vertices data to file...");
 			int vertexCount = 0;
 			for (std::list<V*>::iterator vite = vs.begin(); vite != vs.end();vite++)
 			{
@@ -1774,14 +1920,14 @@ namespace HMeshLib
 				vertexCount++;
 				
 				// 每写入100个顶点记录一次日志
-				if (vertexCount % 100 == 0) {
-					logFunc("  Wrote " + std::to_string(vertexCount) + " vertices...");
-				}
+				// if (vertexCount % 100 == 0) {
+				// 	logFunc("  Wrote " + std::to_string(vertexCount) + " vertices...");
+				// }
 			}
-			logFunc("Completed writing " + std::to_string(vertexCount) + " vertices");
+			//logFunc("Completed writing " + std::to_string(vertexCount) + " vertices");
 			
 			// 输出六面体数据
-			logFunc("Writing hex data to file...");
+			//logFunc("Writing hex data to file...");
 			int hexCount = 0;
 			for (std::list<H*>::iterator hite = hs.begin(); hite != hs.end(); hite++)
 			{
@@ -1799,14 +1945,14 @@ namespace HMeshLib
 				hexCount++;
 				
 				// 每写入100个六面体记录一次日志
-				if (hexCount % 100 == 0) {
-					logFunc("  Wrote " + std::to_string(hexCount) + " hexes...");
-				}
+				// if (hexCount % 100 == 0) {
+				// 	logFunc("  Wrote " + std::to_string(hexCount) + " hexes...");
+				// }
 			}
-			logFunc("Completed writing " + std::to_string(hexCount) + " hexes");
+			//logFunc("Completed writing " + std::to_string(hexCount) + " hexes");
 
 			// 输出边数据
-			logFunc("Writing edge data to file...");
+			//logFunc("Writing edge data to file...");
 			int edgeCount = 0;
 			for (std::list<E*>::iterator eite = es.begin(); eite != es.end(); eite++)
 			{
@@ -1818,11 +1964,11 @@ namespace HMeshLib
 					edgeCount++;
 				}
 			}
-			logFunc("Completed writing " + std::to_string(edgeCount) + " edges with string attributes");
+			//logFunc("Completed writing " + std::to_string(edgeCount) + " edges with string attributes");
 
 			// 关闭文件
 			_os.close();
-			logFunc("File closed successfully: " + std::string(output));
+			//logFunc("File closed successfully: " + std::string(output));
 		}
 		catch (const std::exception& e) {
 			logFunc("Exception occurred during write_Qhex: " + std::string(e.what()));

@@ -282,6 +282,10 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
 void print_state(const State& state);
 void compare_diff(const State& state1, const State& state2);
 py::list state_to_list(const State& state);
+
+double calculate_average_min_jacobian(TMesh* mesh);
+float evaluate_overall_mesh_quality(TMesh* mesh, get_singularity_number<TMesh>& singularity_checker);
+double calculate_global_min_jacobian(TMesh* mesh);
 // ────────────────────
 
 std::string format_matrix(const State& state) {
@@ -394,8 +398,8 @@ std::vector<TE*> get_sheet_byId(TMesh* mesh, int sheet_id, sheet_operation<TMesh
 void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
     auto logFunc = HMeshLib::getSheetLog() ? HMeshLib::log : [](const std::string&){}; // Use sheet_operation log
 
-    logFunc("calc_state: Starting state calculation.");
-    logFunc("calc_state: Current sharp edge count: " + std::to_string(mesh->count_sharp_edges()));
+    //logFunc("calc_state: Starting state calculation.");
+    //logFunc("calc_state: Current sharp edge count: " + std::to_string(mesh->count_sharp_edges()));
 
     // 获取最大的sheet ID
     int max_sheet_id = 0;
@@ -403,7 +407,7 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
          TE* be = *eite;
          if(be) max_sheet_id = std::max(max_sheet_id, be->sheet());
     }
-    logFunc("calc_state: Maximum sheet ID found: " + std::to_string(max_sheet_id));
+    //logFunc("calc_state: Maximum sheet ID found: " + std::to_string(max_sheet_id));
 
     // state.print(); // Can print initial empty state if needed
 
@@ -423,7 +427,7 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
 
         std::vector<TE*> sheet = sheet_op.get_one_sheet(edge_with_id);
         if (sheet.empty()) {
-            logFunc("calc_state: Warning - get_one_sheet returned empty for sheet ID " + std::to_string(sheet_id));
+            //logFunc("calc_state: Warning - get_one_sheet returned empty for sheet ID " + std::to_string(sheet_id));
             continue;
         }
 
@@ -478,13 +482,13 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
                       dist_feat); // 添加新参数
 
         } catch (const std::exception& e) {
-            logFunc("calc_state: Exception during feature calculation for sheet " + std::to_string(sheet_id) + ": " + std::string(e.what()));
+            //logFunc("calc_state: Exception during feature calculation for sheet " + std::to_string(sheet_id) + ": " + std::string(e.what()));
             // 使用默认值添加 (包括新属性的默认值) - 使用大距离表示无效或未计算
              const double DEFAULT_DISTANCE = 1e6; // Or other suitable default
             state.add(sheet_id, sheet_energy, 0.0, 0.0, 0, 1.0, 0.0, 0.0, 1.0, 1.0, DEFAULT_DISTANCE);
         }
     }
-    logFunc("calc_state: State calculation finished. Final state size: " + std::to_string(state.size()));
+    //logFunc("calc_state: State calculation finished. Final state size: " + std::to_string(state.size()));
     state.print();
 }
 
@@ -494,54 +498,54 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
     std::cout << "action: " << action << " state_energy: " << state.sheet_energy[action] << std::endl;
     
     /* 从环境变量获取会话ID */
-    char* session_id_env = nullptr;
-    size_t len = 0;
-    _dupenv_s(&session_id_env, &len, "RL_HMESH_SESSION_ID");
-    std::string session_id = session_id_env ? std::string(session_id_env) : "unknown";
-    if (session_id_env) free(session_id_env);
+    // char* session_id_env = nullptr;
+    // size_t len = 0;
+    // _dupenv_s(&session_id_env, &len, "RL_HMESH_SESSION_ID");
+    // std::string session_id = session_id_env ? std::string(session_id_env) : "unknown";
+    // if (session_id_env) free(session_id_env);
     
-    // 创建当前会话的日志目录
-    std::string log_dir = "f:\\RL_HMesh\\logs\\" + session_id;
+    // // 创建当前会话的日志目录
+    // std::string log_dir = "f:\\RL_HMesh\\logs\\" + session_id;
     
-    // 创建特定于此操作的日志文件
-    std::string action_log_filename = log_dir + "\\action_" + 
-                                    std::to_string(action) + "_sheet_" + 
-                                    std::to_string(state.sheet_id[action]) + ".log";
+    // // 创建特定于此操作的日志文件
+    // std::string action_log_filename = log_dir + "\\action_" + 
+    //                                 std::to_string(action) + "_sheet_" + 
+    //                                 std::to_string(state.sheet_id[action]) + ".log";
     
-    std::ofstream action_log(action_log_filename, std::ios::app);
+    // std::ofstream action_log(action_log_filename, std::ios::app);
     
-    if (action_log.is_open()) {
-        auto now = std::chrono::system_clock::now();
-        std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-        std::tm now_tm;
-        localtime_s(&now_tm, &now_time);
+    //if (action_log.is_open()) {
+    //     auto now = std::chrono::system_clock::now();
+    //     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    //     std::tm now_tm;
+    //     localtime_s(&now_tm, &now_time);
         
-        char timestamp[64];
-        std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &now_tm);
+    //     char timestamp[64];
+    //     std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &now_tm);
         
-        action_log << "==== Action Log: " << timestamp << " ====" << std::endl;
-        action_log << "Session ID: " << session_id << std::endl;
-        action_log << "Action: " << action << " Sheet ID: " << state.sheet_id[action] << " Energy: " << state.sheet_energy[action] << std::endl;
-    }
+    //     action_log << "==== Action Log: " << timestamp << " ====" << std::endl;
+    //     action_log << "Session ID: " << session_id << std::endl;
+    //     action_log << "Action: " << action << " Sheet ID: " << state.sheet_id[action] << " Energy: " << state.sheet_energy[action] << std::endl;
+    // }
     /* 管理logs/traininh文件 */
     
     if (state.sheet_energy[action] <= 0 && state.check_error_choice(action)) {
         std::cout << "sheet_energy is 0, can't collapse" << std::endl;
         done = 0; // 0表示 因为模型选择错误导致的异常，应赋予极大惩罚
-        if (action_log.is_open()) {
-            action_log << "Done status: " << done << std::endl;
-            action_log << "========== End of Action Log ==========" << std::endl << std::endl;
-            action_log.close();
-        }
+        // if (action_log.is_open()) {
+        //     action_log << "Done status: " << done << std::endl;
+        //     action_log << "========== End of Action Log ==========" << std::endl << std::endl;
+        //     action_log.close();
+        // }
         return done;
     } 
     else if (state.sheet_energy[action] <= 0) {
         done = 1; // 1表示 mesh优化结束，重置开始下一个episode
-        if (action_log.is_open()) {
-            action_log << "Done status: " << done << std::endl;
-            action_log << "========== End of Action Log ==========" << std::endl << std::endl;
-            action_log.close();
-        }
+        // if (action_log.is_open()) {
+        //     action_log << "Done status: " << done << std::endl;
+        //     action_log << "========== End of Action Log ==========" << std::endl << std::endl;
+        //     action_log.close();
+        // }
         return done;
     }
     else {
@@ -556,16 +560,18 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
         get_singularity_num_op.generate_singularity_number(&tmesh);
         std::cout << "generate_singularity_number" << std::endl;
 
+        tmesh.compute_features();
+
         state.clear();
         std::cout << "clear state down" << std::endl;
         calc_state(&tmesh, state, sheet_op);
         std::cout << "calc_state down" << std::endl;
         // 不再调用fill_state，让state包含所有的sheet
-        if (action_log.is_open()) {
-            action_log << "Done status: " << done << std::endl;
-            action_log << "========== End of Action Log ==========" << std::endl << std::endl;
-            action_log.close();
-        }
+        // if (action_log.is_open()) {
+        //     action_log << "Done status: " << done << std::endl;
+        //     action_log << "========== End of Action Log ==========" << std::endl << std::endl;
+        //     action_log.close();
+        // }
         return done;
     }
 }
@@ -574,11 +580,11 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
 float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get_singularity_num_op,
     const State& prev_state, int action_index, const State& new_state) {
 
-    auto logFunc = HMeshLib::getSheetLog() ? HMeshLib::log : [](const std::string&){};
+    // auto logFunc = HMeshLib::getSheetLog() ? HMeshLib::log : [](const std::string&){};
 
-    logFunc("calc_reward: Calculating reward...");
-    logFunc("calc_reward: Prev singularity count = " + std::to_string(current_singularity_num) +
-    ", New singularity count = " + std::to_string(get_singularity_num_op.singualarity_id));
+    // logFunc("calc_reward: Calculating reward...");
+    // logFunc("calc_reward: Prev singularity count = " + std::to_string(current_singularity_num) +
+    // ", New singularity count = " + std::to_string(get_singularity_num_op.singualarity_id));
 
     // 基于奇异性数量变化的基础奖励
     float base_reward = 0.0f;
@@ -588,7 +594,7 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     base_reward = -10.0f; // 负奖励: 增加奇异线 (不期望发生)
     else
     base_reward = -1.0f; // 小惩罚: 奇异线数量不变 (鼓励进步)
-    logFunc("calc_reward: base_reward = " + std::to_string(base_reward));
+    //logFunc("calc_reward: base_reward = " + std::to_string(base_reward));
 
 
     float geometry_reward = 0.0f;
@@ -609,7 +615,7 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     //action_index >= prev_state.sheet_distance_to_boundary.size() ||
     action_index >= prev_state.sheet_distance_to_feature.size())
     {
-    logFunc("calc_reward: Warning - Invalid action_index (" + std::to_string(action_index) + ") or inconsistent prev_state size (" + std::to_string(prev_state.size()) + "). Using only base reward.");
+    //logFunc("calc_reward: Warning - Invalid action_index (" + std::to_string(action_index) + ") or inconsistent prev_state size (" + std::to_string(prev_state.size()) + "). Using only base reward.");
     return base_reward; // 如果索引无效，只返回基础奖励
     }
 
@@ -676,14 +682,14 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     if (avg_jacobian_before > -1e9 && avg_jacobian_after > -1e9 && prev_state.size() > 0 && new_state.size() > 0) {
     float quality_change = (float)(avg_jacobian_after - avg_jacobian_before);
     geometry_reward += quality_change * 15.0f; // 调整权重因子以平衡影响
-    logFunc("  calc_reward: Quality change reward: " + std::to_string(quality_change * 15.0f) + " (Before: " + std::to_string(avg_jacobian_before) + ", After: " + std::to_string(avg_jacobian_after) + ")");
+    //logFunc("  calc_reward: Quality change reward: " + std::to_string(quality_change * 15.0f) + " (Before: " + std::to_string(avg_jacobian_before) + ", After: " + std::to_string(avg_jacobian_after) + ")");
     } else {
-    logFunc("  calc_reward: Skipping quality change reward due to invalid average Jacobian values or empty states.");
+    //logFunc("  calc_reward: Skipping quality change reward due to invalid average Jacobian values or empty states.");
     }
 
     // --- 总奖励 ---
     float total_reward = base_reward + geometry_reward;
-    logFunc("calc_reward: Final Reward Calculation -> Base=" + std::to_string(base_reward) + ", Geo=" + std::to_string(geometry_reward) + ", Total=" + std::to_string(total_reward));
+    //logFunc("calc_reward: Final Reward Calculation -> Base=" + std::to_string(base_reward) + ", Geo=" + std::to_string(geometry_reward) + ", Total=" + std::to_string(total_reward));
 
     return total_reward;
 }
@@ -719,5 +725,97 @@ py::list state_to_list(const State& state) {
     return result;
 }
 
+double calculate_average_min_jacobian(TMesh* mesh) {
+    if (!mesh || mesh->hs.empty()) {
+        return 0.0; // 或者一个表示无效的值，例如负数
+    }
+    CMeshQuality<TMesh> quality_evaluator(mesh);
+    double total_min_jacobian = 0.0;
+    int valid_hex_count = 0;
 
+    for (TMesh::MHIterator hi(mesh); !hi.end(); hi++) {
+        TMesh::H* h = *hi;
+        if (!h) continue;
+        std::vector<double> jacobians = quality_evaluator.get_JacobianMatricesDet(h); // 获取9个雅可比值
+        if (jacobians.empty()) continue;
+
+        double min_hex_jacobian = jacobians[0]; // 假设第一个是有效的
+        for (size_t i = 1; i < jacobians.size(); ++i) {
+            if (jacobians[i] < min_hex_jacobian) {
+                min_hex_jacobian = jacobians[i];
+            }
+        }
+        // 排除非常小的或者负的雅可比值（这些可能表示退化或翻转的单元）
+        // 一个更鲁棒的方法是只考虑正的雅可比值
+        if (min_hex_jacobian > 1e-6) { // 阈值可以调整
+             total_min_jacobian += min_hex_jacobian;
+             valid_hex_count++;
+        }
+    }
+
+    if (valid_hex_count == 0) {
+        return 0.0; // 没有有效的六面体来评估质量
+    }
+    return total_min_jacobian / valid_hex_count;
+}
+
+// (可选) 计算网格的最小雅可比行列式 (全局最小)
+double calculate_global_min_jacobian(TMesh* mesh) {
+    if (!mesh || mesh->hs.empty()) {
+        return 0.0;
+    }
+    CMeshQuality<TMesh> quality_evaluator(mesh);
+    double global_min_jacobian = std::numeric_limits<double>::max();
+    bool found_valid = false;
+
+    for (TMesh::MHIterator hi(mesh); !hi.end(); hi++) {
+        TMesh::H* h = *hi;
+        if (!h) continue;
+        std::vector<double> jacobians = quality_evaluator.get_JacobianMatricesDet(h);
+        if (jacobians.empty()) continue;
+
+        double min_hex_jacobian = jacobians[0];
+        for (size_t i = 1; i < jacobians.size(); ++i) {
+            if (jacobians[i] < min_hex_jacobian) {
+                min_hex_jacobian = jacobians[i];
+            }
+        }
+        if (min_hex_jacobian > 1e-6) { // 只考虑有效的正雅可比
+            if (min_hex_jacobian < global_min_jacobian) {
+                global_min_jacobian = min_hex_jacobian;
+            }
+            found_valid = true;
+        }
+    }
+    return found_valid ? global_min_jacobian : 0.0;
+}
+
+
+// 综合网格质量评估函数
+// 返回一个综合得分，越高越好
+float evaluate_overall_mesh_quality(TMesh* mesh, get_singularity_number<TMesh>& singularity_checker) {
+    if (!mesh) return -std::numeric_limits<float>::infinity();
+
+    // 1. 奇异线数量 (越少越好)
+    singularity_checker.generate_singularity_number(mesh); // 确保获取最新的奇异线数量
+    float singularity_score = -static_cast<float>(singularity_checker.singualarity_id) * 10.0f; // 每条奇异线扣10分
+
+    // 2. 最小雅可比行列式 (越大越好，阈值0.1)
+    double min_jacobian = calculate_global_min_jacobian(mesh);
+    float jacobian_score = 0.0f;
+    if (min_jacobian < 0.1) {
+        jacobian_score = static_cast<float>(min_jacobian - 0.1) * 50.0f; // 低于0.1则大力惩罚
+    } else {
+        jacobian_score = static_cast<float>(min_jacobian) * 5.0f; // 高于0.1则给予正向奖励
+    }
+    
+    // 3. （可选）平均雅可比行列式 (越大越好)
+    // double avg_jacobian = calculate_average_min_jacobian(mesh);
+    // float avg_jacobian_score = static_cast<float>(avg_jacobian) * 2.0f;
+
+    // 综合得分，可以调整权重
+    float overall_quality = singularity_score + jacobian_score; // + avg_jacobian_score;
+    // std::cout << "  Quality Eval: S_Score=" << singularity_score << ", J_Score=" << jacobian_score << ", Overall=" << overall_quality << std::endl;
+    return overall_quality;
+}
 #endif // STATE_FUNCTIONS_H

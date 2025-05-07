@@ -227,7 +227,7 @@ int main(int argc, char* argv[])
                 // }
 
 
-        for(int episode = 0; episode < 50; episode++){
+        for(int episode = 0; episode < 100; episode++){
             std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl;
 
         /*---------- log setting ----------*/
@@ -240,10 +240,10 @@ int main(int argc, char* argv[])
             tmesh.load_Qhex(mesh_name.c_str());
             //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
 
-            std::cout<< "boundary count by face: " << tmesh.count_boundary_byF() << std::endl;
-            std::cout<< "boundary count by edge: " << tmesh.count_boundary_byE() << std::endl;
-            std::cout<< "sharp edge count: " << tmesh.count_sharp_edges() << std::endl;
-            std::cout<< "corner count: " << tmesh.count_corner() << std::endl;
+            //std::cout<< "boundary count by face: " << tmesh.count_boundary_byF() << std::endl;
+            //std::cout<< "boundary count by edge: " << tmesh.count_boundary_byE() << std::endl;
+            //std::cout<< "sharp edge count: " << tmesh.count_sharp_edges() << std::endl;
+            //std::cout<< "corner count: " << tmesh.count_corner() << std::endl;
 
             // 使用正确的方法访问网格数据
             std::cout << "Vertex count: " << tmesh.vs.size() << std::endl;
@@ -326,7 +326,7 @@ int main(int argc, char* argv[])
                     if(done==0){
                         std::cout << "Critical error: sheet energy <= 0. Ending episode with penalty." << std::endl;
                         total_reward += -100000.0f; // Large negative reward
-                        log(episode, state_snapshot, action, state, total_reward); // Use snapshot
+                        //log(episode, state_snapshot, action, state, total_reward); // Use snapshot
                         agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
                         break; // End current training episode immediately
                     }
@@ -334,7 +334,7 @@ int main(int argc, char* argv[])
                         std::cout << "Optimization finished. Ending episode." << std::endl;
                         total_reward += calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
                         std::cout << "Total reward: " << total_reward << std::endl;
-                        log(episode, state_snapshot, action, state, total_reward);  
+                        //log(episode, state_snapshot, action, state, total_reward);  
                         agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
                         break; // End current training episode immediately
                     }
@@ -343,7 +343,7 @@ int main(int argc, char* argv[])
                     }
                     total_reward += calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
                     std::cout << "Total reward: " << total_reward << std::endl;
-                    log(episode, state_snapshot, action, state, total_reward);
+                    //log(episode, state_snapshot, action, state, total_reward);
                     std::cout << "Log completed" << std::endl;
                     agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), total_reward);
                     std::cout << "Memory update completed" << std::endl;
@@ -353,35 +353,37 @@ int main(int argc, char* argv[])
                 if (state.size() > 0) {
                     std::cout << "Training normally ended, saving model" << std::endl;
                     agent.attr("replay")();
-                    
-                    // 确保目录存在
-                    system("mkdir \"python_modules\\models\" 2>NUL");
-                    
-                    // 使用save_checkpoint函数同时保存模型和记忆
-                    std::cout << "Saving model and replay memory..." << std::endl;
-                    agent.attr("save_checkpoint")(model_path, memory_path);
-                    std::cout << "Model and replay memory saved successfully" << std::endl;
+
                 } else {
                     std::cout << "Training abnormally ended, state is empty" << std::endl;
                 }
 
-                // save to data\results
-                std::string result_dir = "F://RL_HMesh//data//results//";
-                system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
+            //     // save to data\results
+            //     std::string result_dir = "F://RL_HMesh//data//results//";
+            //     system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
 
-            // 从mesh_name提取文件名部分 (不含扩展名)
-            std::string base_filename = entry.path().stem().string();
+            // // 从mesh_name提取文件名部分 (不含扩展名)
+            // std::string base_filename = entry.path().stem().string();
 
-            std::string result_file = result_dir + base_filename + "_processed_" + std::to_string(episode) + ".Qhex";
-            std::cout << "Saving collapsed mesh to: " << result_file << std::endl;
-            tmesh.write_Qhex(result_file.c_str());
+            // std::string result_file = result_dir + base_filename + "_processed_" + std::to_string(episode) + ".Qhex";
+            // std::cout << "Saving collapsed mesh to: " << result_file << std::endl;
+            // tmesh.write_Qhex(result_file.c_str());
+
+
                 // Restore cout and cerr at the end of training for this file
                 std::cout.rdbuf(cout_buf);
                 std::cerr.rdbuf(cerr_buf);
             } // end episode loop for one file
 
-            std::cout << "文件处理完成: " << mesh_name << std::endl;
-
+            std::cout << "process down: " << mesh_name << std::endl;
+                    
+            // 确保目录存在
+            system("mkdir \"python_modules\\models\" 2>NUL");
+            
+            // 使用save_checkpoint函数同时保存模型和记忆
+            std::cout << "Saving model and replay memory..." << std::endl;
+            agent.attr("save_checkpoint")(model_path, memory_path);
+            std::cout << "Model and replay memory saved successfully" << std::endl;
             } // end if .Qhex file
         } // end directory iteration loop
 
