@@ -1,0 +1,92 @@
+graph LR
+    subgraph CppApp [C++ 应用环境]
+        direction LR
+        CPP_Main["main.cpp (训练流程编排)"]
+
+        subgraph CppLibs [C++ 网格与逻辑库]
+            direction TB
+            Lib_TMesh["TMesh (topoMesh.h)<br/>核心网格数据结构与操作"]
+            Lib_SheetOp["Sheet 操作 (sheet_operation.h)<br/>Sheet坍缩, Sheet特征计算"]
+            Lib_StateFunc["状态/奖励/动作逻辑 (state_functions.h)<br/>calc_state (状态计算), state_to_list (状态转换与归一化), calc_reward (奖励计算), play_action (动作执行)"]
+            Lib_Singularity["奇异点度量 (singularity_number.h)"]
+            Lib_Quality["网格质量 (meshQuality.h)<br/>雅可比行列式等"]
+            Lib_Tools["网格工具 (tools.h)"]
+        end
+
+        Pybind11_CPP["Pybind11 (C++ 端接口)"]
+    end
+
+    subgraph PyEnv [Python强化学习环境]
+        direction LR
+        Pybind11_PY["Pybind11 (Python 端接口)"]
+        Agent["强化学习智能体 (agent.py)<br/>决策制定, 学习控制, Episode逻辑"]
+
+        subgraph PyMLComps [Python机器学习组件]
+            direction TB
+            NN["神经网络 (network.py)<br/>HexMeshQNet/U_linear_QNet<br/>策略网络 & 目标网络"]
+            ReplayMem["经验回放池 (utils.py)<br/>优先经验回放"]
+        end
+    end
+
+    subgraph FileSystem [文件系统]
+        direction TB
+        InputMeshes["输入网格 (.Qhex)"]
+        OutputData["输出数据<br/>处理后网格 (可选)<br/>保存的模型 (.pt)<br/>经验池 (.pkl)<br/>日志文件 (.log)"]
+    end
+
+
+    InputMeshes --> CPP_Main::加载网格至TMesh对象
+    CPP_Main -- "1.获取当前状态<br/>(调用 Lib_StateFunc::calc_state 及 state_to_list)" --> Lib_StateFunc
+    Lib_StateFunc -- "归一化后的状态列表" --> Pybind11_CPP
+    Pybind11_CPP -- "状态数据" --> Pybind11_PY
+    Pybind11_PY -- "状态 (送往 agent.choose_action)" --> Agent
+    Agent       -- "动作索引 (由 agent.choose_action 返回)" --> Pybind11_PY
+    Pybind11_PY -- "动作索引" --> Pybind11_CPP
+    Pybind11_CPP -- "动作索引" --> CPP_Main
+    CPP_Main -- "2.执行动作 & 获取下一状态<br/>(调用 Lib_StateFunc::play_action)" --> Lib_StateFunc
+    CPP_Main -- "3.计算奖励<br/>(调用 Lib_StateFunc::calc_reward)" --> Lib_StateFunc
+    CPP_Main -- "4.发送经验给智能体<br/>(State, Action, NextState, Reward, Done)" --> Pybind11_CPP
+    Pybind11_CPP -- "经验元组" --> Pybind11_PY
+    Pybind11_PY -- "经验元组 (送往 agent.remember)" --> Agent
+    CPP_Main -- "5.触发智能体学习" ---> Pybind11_CPP
+    Pybind11_CPP -- "调用 agent.replay()" --> Pybind11_PY
+    Pybind11_PY -- " " --> Agent 
+    CPP_Main -- "6.检查Episode是否结束" ---> Pybind11_CPP
+    Pybind11_CPP -- "调用 agent.is_finish()" --> Pybind11_PY
+    Pybind11_PY -- " " --> Agent 
+    Agent       -- "继续/结束标志 (由 agent.is_finish 返回)" --> Pybind11_PY
+
+
+    %% === C++ 内部库交互 (示例) ===
+    CPP_Main --> Lib_TMesh::访问与操作
+    Lib_StateFunc -- "依赖/使用" --> Lib_TMesh
+    Lib_StateFunc -- "依赖/使用" --> Lib_SheetOp
+    Lib_StateFunc -- "依赖/使用" --> Lib_Singularity
+    Lib_StateFunc -- "依赖/使用" --> Lib_Quality
+    Lib_SheetOp -- "修改/读取" --> Lib_TMesh
+
+    %% === Python 内部组件交互 ===
+    Agent -- "预测Q值" --> NN
+    Agent -- "更新策略网络" --> NN
+    Agent -- "存储/采样经验" --> ReplayMem
+
+    %% === 文件系统输出交互 ===
+    CPP_Main -- "保存处理后网格 (可选)" --> OutputData
+    CPP_Main -- "写入主日志" --> OutputData 
+    Agent -- "保存/加载模型与经验池" --> OutputData
+    Lib_StateFunc -- "写入训练日志 (training.log)" --> OutputData
+    Lib_SheetOp -- "写入Sheet操作日志 (sheet_operation.log)" --> OutputData
+
+
+    %% 样式定义 %%
+    classDef cpp fill:#D6EAF8,stroke:#5DADE2,stroke-width:2px;
+    classDef py fill:#D5F5E3,stroke:#58D68D,stroke-width:2px;
+    classDef fs fill:#FCF3CF,stroke:#F4D03F,stroke-width:2px;
+    classDef connector fill:#EAECEE,stroke:#808B96,stroke-width:2px;
+
+    class CPP_Main,CppLibs cpp;
+    class Lib_TMesh,Lib_SheetOp,Lib_StateFunc,Lib_Singularity,Lib_Quality,Lib_Tools cpp;
+    class Agent,PyMLComps py;
+    class NN,ReplayMem py;
+    class Pybind11_CPP,Pybind11_PY connector;
+    class InputMeshes,OutputData fs;

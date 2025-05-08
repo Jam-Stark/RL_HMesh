@@ -2,6 +2,8 @@
 
 # TopoHexMeshLib_sheet_singularity
 
+![系统架构图](image/README/系统架构图.png "系统架构图")
+
 ## Description
 
 This project, TopoHexMeshLib_sheet_singularity, appears to be a C++ application with Python integration, focused on hexahedral mesh processing, specifically dealing with sheet singularity operations and mesh quality assessment. It utilizes a Reinforcement Learning (RL) agent, implemented in Python, to guide mesh optimization processes. The C++ core handles mesh data structures, topological operations (like sheet collapse and singularity number generation), and mesh quality calculations. The Python agent, likely using PyTorch, makes decisions on actions to perform on the mesh, learns from these actions, and can save/load its state.

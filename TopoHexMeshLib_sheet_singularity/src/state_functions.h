@@ -15,11 +15,50 @@
 #include "topoMesh.h"
 #include "tools.h"
 
+#include <algorithm> // 用于 std::min, std::max
+#include <limits>    // 用于 std::numeric_limits
+#include <cmath>     // 用于 std::abs 和其他数学函数
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 namespace py = pybind11;
 
 using namespace HMeshLib;
+
+// ──────────────────── 归一化相关定义 ────────────────────
+
+// 定义单个特征的归一化参数结构体
+struct FeatureNormalizationParams {
+    double min_val;
+    double max_val;
+};
+
+// `sheet_energy` 的特殊标记值
+const double ENERGY_CANNOT_COLLAPSE_SENTINEL = -99999; // 与 sheet_operation.h 中 predict_sheet_collapse_energy 的返回值一致
+// `sheet_energy` 正值部分的缩放参数
+const double ENERGY_MIN_POSITIVE_FOR_SCALING = 0.001;   // 用于缩放的最小正能量值 (避免log(0)或除以极小值)
+const double ENERGY_MAX_POSITIVE_FOR_SCALING = 500.0;   // 用于缩放的最大正能量值 (作为上限，可根据数据调整，例如99百分位数)
+
+// `sheet_energy` 归一化后的特殊目标值
+const double NORMALIZED_ENERGY_COLLAPSED = 0.0;          // 已坍缩的Sheet (原始能量0.0) 映射为此值
+const double NORMALIZED_ENERGY_CANNOT_COLLAPSE = -0.1;    // 不可坍缩的Sheet (原始能量-99999.0) 映射为此值
+// `sheet_energy` 正值部分归一化后的目标范围
+const double NORMALIZED_ENERGY_POSITIVE_TARGET_MIN = 0.0;
+const double NORMALIZED_ENERGY_POSITIVE_TARGET_MAX = 1.0;
+
+// 其他特征的归一化参数数组。顺序必须与 state_to_list 中添加特征的顺序一致。
+const FeatureNormalizationParams normalization_params_others[9] = {
+    // 对应特征:                                   占位符 min,占位符 max
+    {0.0, 1.0},    // sheet_on_boundary_ratio
+    {0.0, 1.0},    // sheet_on_feature_ratio
+    {0.0, 15.0},   // sheet_adjacent_feature_edges_count
+    {0.0, 1.0},    // sheet_curvature_metric
+    {0.0, 180.0},  // sheet_normal_variation
+    {0.0, 180.0},  // sheet_dihedral_angle_deviation
+    {-1.0, 1.0},   // sheet_min_scaled_jacobian
+    {-1.0, 1.0},   // sheet_avg_scaled_jacobian
+    {0.0, 100.0}   // sheet_distance_to_feature
+};
 
 // State 类定义
 class State {
@@ -286,6 +325,9 @@ py::list state_to_list(const State& state);
 double calculate_average_min_jacobian(TMesh* mesh);
 float evaluate_overall_mesh_quality(TMesh* mesh, get_singularity_number<TMesh>& singularity_checker);
 double calculate_global_min_jacobian(TMesh* mesh);
+
+double scale_value(double value, double source_min, double source_max, double target_min, double target_max);
+double normalize_sheet_energy(double energy_value);
 // ────────────────────
 
 std::string format_matrix(const State& state) {
@@ -702,28 +744,28 @@ void print_state(const State& state) {
     state.print(); // Use the updated print method in the State class
 }
 
-// --- Update state_to_list ---
-py::list state_to_list(const State& state) {
+// --- 更新 state_to_list 函数以包含归一化 ---
+inline py::list state_to_list(const State& state) {
     py::list result;
-    size_t expected_size = 13; // Update expected number of features per row
 
     for (size_t i = 0; i < state.size(); i++) {
-
         py::list row;
-        row.append(state.sheet_id[i]);
-        row.append(state.sheet_energy[i]);
-        row.append(state.sheet_on_boundary_ratio[i]);
-        row.append(state.sheet_on_feature_ratio[i]);
-        //row.append(state.sheet_endpoints_are_corners_or_boundary[i] ? 1.0 : 0.0);
-        row.append(static_cast<double>(state.sheet_adjacent_feature_edges_count[i]));
-        row.append(state.sheet_curvature_metric[i]);
-        row.append(state.sheet_normal_variation[i]);
-        row.append(state.sheet_dihedral_angle_deviation[i]);
-        row.append(state.sheet_min_scaled_jacobian[i]);
-        row.append(state.sheet_avg_scaled_jacobian[i]);
-        //row.append(static_cast<double>(state.sheet_valence_along_path_count[i]));
-        //row.append(state.sheet_distance_to_boundary[i]); // 新增
-        row.append(state.sheet_distance_to_feature[i]);   // 新增
+        row.append(state.sheet_id[i]); // ID 通常不参与归一化
+
+        // 特征 0: sheet_energy (特殊处理)
+        row.append(normalize_sheet_energy(state.sheet_energy[i]));
+
+        // 其他特征 (索引从0到8，对应 normalization_params_others 数组)
+        row.append(scale_value(state.sheet_on_boundary_ratio[i], normalization_params_others[0].min_val, normalization_params_others[0].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_on_feature_ratio[i], normalization_params_others[1].min_val, normalization_params_others[1].max_val, 0.0, 1.0));
+        row.append(scale_value(static_cast<double>(state.sheet_adjacent_feature_edges_count[i]), normalization_params_others[2].min_val, normalization_params_others[2].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_curvature_metric[i], normalization_params_others[3].min_val, normalization_params_others[3].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_normal_variation[i], normalization_params_others[4].min_val, normalization_params_others[4].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_dihedral_angle_deviation[i], normalization_params_others[5].min_val, normalization_params_others[5].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_min_scaled_jacobian[i], normalization_params_others[6].min_val, normalization_params_others[6].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_avg_scaled_jacobian[i], normalization_params_others[7].min_val, normalization_params_others[7].max_val, 0.0, 1.0));
+        row.append(scale_value(state.sheet_distance_to_feature[i], normalization_params_others[8].min_val, normalization_params_others[8].max_val, 0.0, 1.0));
+
         result.append(row);
     }
     return result;
@@ -822,4 +864,35 @@ float evaluate_overall_mesh_quality(TMesh* mesh, get_singularity_number<TMesh>& 
     // std::cout << "  Quality Eval: S_Score=" << singularity_score << ", J_Score=" << jacobian_score << ", Overall=" << overall_quality << std::endl;
     return overall_quality;
 }
+
+
+
+// 通用值缩放辅助函数: 将 value 从 [source_min, source_max] 线性映射到 [target_min, target_max]
+inline double scale_value(double value, double source_min, double source_max, double target_min, double target_max) {
+    if (std::abs(source_max - source_min) < 1e-9) { // 处理 source_min 和 source_max 几乎相等的情况
+        return target_min; // 或者 (target_min + target_max) / 2.0
+    }
+    double normalized_01 = (value - source_min) / (source_max - source_min);
+    double scaled = target_min + normalized_01 * (target_max - target_min);
+    return std::max(target_min, std::min(target_max, scaled)); // 裁剪到目标范围
+}
+
+// `sheet_energy` 的专属归一化函数
+inline double normalize_sheet_energy(double energy_value) {
+    if (std::abs(energy_value - 0.0) < 1e-9) { // 已坍缩
+        return NORMALIZED_ENERGY_COLLAPSED;
+    } else if (energy_value < (ENERGY_CANNOT_COLLAPSE_SENTINEL + 1.0) && energy_value > (ENERGY_CANNOT_COLLAPSE_SENTINEL -1.0) ) { // 不可坍缩, 比较浮点数时增加容差
+        return NORMALIZED_ENERGY_CANNOT_COLLAPSE;
+    } else if (energy_value > 0) { // 正能量，可坍缩
+        double clipped_energy = std::max(ENERGY_MIN_POSITIVE_FOR_SCALING, std::min(energy_value, ENERGY_MAX_POSITIVE_FOR_SCALING));
+        return scale_value(clipped_energy,
+                           ENERGY_MIN_POSITIVE_FOR_SCALING, ENERGY_MAX_POSITIVE_FOR_SCALING,
+                           NORMALIZED_ENERGY_POSITIVE_TARGET_MIN, NORMALIZED_ENERGY_POSITIVE_TARGET_MAX);
+    } else {
+        // 其他意外的负值 (非标记值)
+        // std::cerr << "Warning: Unexpected negative energy value encountered during normalization: " << energy_value << std::endl;
+        return NORMALIZED_ENERGY_CANNOT_COLLAPSE; // 暂时也映射为不可坍缩，或定义新的错误映射值
+    }
+}
+
 #endif // STATE_FUNCTIONS_H

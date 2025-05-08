@@ -38,7 +38,7 @@ class Agent:
         self.updates_count = 0
         self.error_filter_threshold = 0.05
         self.max_filter_threshold = 0.95
-        self.filter_increase_rate = 0.01
+        self.filter_increase_rate = 0.018 # Adjusted for max_episode = 50 (was 0.01)
         self.total_episodes = 0
         self.error_encounter_count = 0
 
@@ -80,7 +80,7 @@ class Agent:
             self.model = self.policy_net  # 兼容性
             
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=0.001)  # 降低学习率以提高稳定性
-        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=5, gamma=0.5)  # 更平缓的学习率衰减
+        self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=3, gamma=0.5)  # Adjusted step_size for max_episode = 50 (was 5)
         
         # 目标网络同步频率
         self.target_update_freq = 10  # 每10次经验回放更新一次目标网络
@@ -219,10 +219,12 @@ class Agent:
         """选择动作，带有自适应错误过滤机制"""
         self.total_episodes = max(self.total_episodes, episode + 1)
         
+        #print(f"normalized state: {state}") # 打印归一化后的状态
+        #input(f"Press Enter to continue...") # 等待用户输入
         sample = random.random()
         # 调整探索率计算：使用指数衰减，并设置最小探索率
         min_epsilon = 0.05  # 最小探索率
-        decay_rate = 0.995 # 衰减因子，越接近1衰减越慢
+        decay_rate = 0.945 # Adjusted for max_episode = 50 (was 0.995)
         start_epsilon = 0.9 # 初始探索率
         eps_threshold = max(min_epsilon, start_epsilon * (decay_rate ** episode))
         print(f"Episode: {episode}, Epsilon: {eps_threshold:.4f}") # 打印当前的探索率
@@ -241,7 +243,7 @@ class Agent:
                     print(f"过滤非法动作，重新选择: {action} sheet id: {state[action][0]} energy: {state[action][1]}")
                     attempts += 1
                 
-                if attempts >= 100:
+                if attempts >= 20:
                     # 如果多次尝试仍找不到合法动作，选择能量最大的sheet
                     print("多次尝试未找到合法动作，选择能量最大的sheet")
                     max_energy = float('-inf')
@@ -475,7 +477,7 @@ class Agent:
                     print(f"目标网络已更新，更新次数: {self.updates_count}")
                 
                 # 每个epoch结束时更新学习率（不是每个batch）
-                if self.updates_count % 100 == 0:
+                if self.updates_count % 50 == 0: # Adjusted for max_episode = 50 (was 100)
                     self.scheduler.step()
                     print(f"学习率已更新为: {self.optimizer.param_groups[0]['lr']}")
                     print(f"当前错误过滤阈值: {self.error_filter_threshold:.2f}, 总训练回合数: {self.total_episodes}")
@@ -544,7 +546,7 @@ class Agent:
                 print(f"目标网络已更新，更新次数: {self.updates_count}")
                 
             # 定期更新学习率
-            if self.updates_count % 100 == 0:
+            if self.updates_count % 50 == 0: # Adjusted for max_episode = 50 (was 100)
                 self.scheduler.step()
                 print(f"学习率已更新为: {self.optimizer.param_groups[0]['lr']}")
                 print(f"当前错误过滤阈值: {self.error_filter_threshold:.2f}, 总训练回合数: {self.total_episodes}")

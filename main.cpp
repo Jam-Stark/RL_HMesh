@@ -211,8 +211,26 @@ int main(int argc, char* argv[])
             }
         }
 
+        // 计算文件夹中的文件总数
+        int total_files = 0;
+        for (const auto& _ : std::filesystem::directory_iterator(mesh_directory_path)) {
+            if (_.is_regular_file() && _.path().extension() == ".Qhex") {
+                total_files++;
+            }
+        }
+        
+        std::cout << "Total .Qhex files found: " << total_files << std::endl;
+        int total_episodes;
+        int file_count = 0;
         // 遍历文件夹中的文件
         for (const auto& entry : std::filesystem::directory_iterator(mesh_directory_path)) {
+            // 更新已处理文件数量
+            if (entry.is_regular_file() && entry.path().extension() == ".Qhex") {
+                file_count++;
+                std::cout << "Processing file " << file_count << " of " << total_files << " (" 
+                          << (file_count * 100 / total_files) << "%)" << std::endl;
+            }
+
             if (entry.is_regular_file() && entry.path().extension() == ".Qhex") {
                 std::string mesh_name = entry.path().string(); // 获取当前处理的文件完整路径
                 std::cout << "\n=====================================================" << std::endl;
@@ -236,162 +254,162 @@ int main(int argc, char* argv[])
                 // }
 
 
-        for(int episode = 0; episode < 100; episode++){
-            std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl;
-            agent.attr("reset_episode_stats")(); // <-- 在 episode 循环开始处调用
-        /*---------- log setting ----------*/
-            TMesh tmesh;
-            sheet_operation<TMesh> sheet_op(&tmesh);
-            get_singularity_number<TMesh> get_singularity_num_op(&tmesh);
+            for(int episode = 0; episode < 50; episode++){
+                std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl;
+                agent.attr("reset_episode_stats")(); // <-- 在 episode 循环开始处调用
+            /*---------- log setting ----------*/
+                TMesh tmesh;
+                sheet_operation<TMesh> sheet_op(&tmesh);
+                get_singularity_number<TMesh> get_singularity_num_op(&tmesh);
 
-            // 加载 .Qhex 文件
-            std::cout << "Loading mesh file: " << mesh_name << std::endl;
-            tmesh.load_Qhex(mesh_name.c_str());
-            //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
+                // 加载 .Qhex 文件
+                std::cout << "Loading mesh file: " << mesh_name << std::endl;
+                tmesh.load_Qhex(mesh_name.c_str());
+                //std::cout << "Mesh loaded, checking mesh data..." << std::endl;
 
-            //std::cout<< "boundary count by face: " << tmesh.count_boundary_byF() << std::endl;
-            //std::cout<< "boundary count by edge: " << tmesh.count_boundary_byE() << std::endl;
-            //std::cout<< "sharp edge count: " << tmesh.count_sharp_edges() << std::endl;
-            //std::cout<< "corner count: " << tmesh.count_corner() << std::endl;
+                //std::cout<< "boundary count by face: " << tmesh.count_boundary_byF() << std::endl;
+                //std::cout<< "boundary count by edge: " << tmesh.count_boundary_byE() << std::endl;
+                //std::cout<< "sharp edge count: " << tmesh.count_sharp_edges() << std::endl;
+                //std::cout<< "corner count: " << tmesh.count_corner() << std::endl;
 
-            int original_hex_count = tmesh.hs.size();
-            int original_edge_count = tmesh.es.size();
-            int original_vertex_count = tmesh.vs.size();
-            int original_face_count = tmesh.fs.size();
+                int original_hex_count = tmesh.hs.size();
+                int original_edge_count = tmesh.es.size();
+                int original_vertex_count = tmesh.vs.size();
+                int original_face_count = tmesh.fs.size();
 
-            // 使用正确的方法访问网格数据
-            std::cout << "Vertex count: " << original_vertex_count << std::endl;
-            std::cout << "Edge count: " << original_edge_count << std::endl;
-            std::cout << "Face count: " << original_face_count << std::endl;
-            std::cout << "Cell count: " <<  original_hex_count << std::endl;
-            std::cout << "Mesh file successfully loaded" << std::endl;
+                // 使用正确的方法访问网格数据
+                std::cout << "Vertex count: " << original_vertex_count << std::endl;
+                std::cout << "Edge count: " << original_edge_count << std::endl;
+                std::cout << "Face count: " << original_face_count << std::endl;
+                std::cout << "Cell count: " <<  original_hex_count << std::endl;
+                std::cout << "Mesh file successfully loaded" << std::endl;
 
-            // Redirect stdout and stderr to main log
-            std::streambuf* cout_buf = std::cout.rdbuf();
-            std::cout.rdbuf(main_log.rdbuf());
-            std::streambuf* cerr_buf = std::cerr.rdbuf();
-            std::cerr.rdbuf(main_log.rdbuf());
-            std::cout << "Log started at " << timestamp << std::endl;
-            std::cout << "Session ID: " << session_id << std::endl;
-            std::cout << "Build Mode: " << build_mode << std::endl;
-            std::cout << "================== Main Program Log for " << mesh_name << " ==================" << std::endl; // 添加文件名到日志
+                // Redirect stdout and stderr to main log
+                std::streambuf* cout_buf = std::cout.rdbuf();
+                std::cout.rdbuf(main_log.rdbuf());
+                std::streambuf* cerr_buf = std::cerr.rdbuf();
+                std::cerr.rdbuf(main_log.rdbuf());
+                std::cout << "Log started at " << timestamp << std::endl;
+                std::cout << "Session ID: " << session_id << std::endl;
+                std::cout << "Build Mode: " << build_mode << std::endl;
+                std::cout << "================== Main Program Log for " << mesh_name << " ==================" << std::endl; // 添加文件名到日志
 
-            int current_singularity_num = 0;
-            float total_reward = 0.0;
-            State state;
-            //std::cout << "Initial state:" << std::endl;
-            state.print();
-            
-            // First reset all edge sheet attributes
-            //std::cout << "Resetting edge sheet attributes..." << std::endl;
-            //sheet_op.reset_sheet_attributes();
-            std::cout << "Calculating mesh sheet number..." << std::endl;
-            sheet_op.get_mesh_sheet_number();
-            std::cout << "Computing edge energy..." << std::endl;
-            sheet_op.compute_edge_energy();
-            
-            std::cout << "Calculating state..." << std::endl;
-            calc_state(&tmesh, state, sheet_op);
-            std::cout << "State calculation complete, current state:" << std::endl;
-            state.print();
+                int current_singularity_num = 0;
+                float total_reward = 0.0;
+                State state;
+                //std::cout << "Initial state:" << std::endl;
+                state.print();
+                
+                // First reset all edge sheet attributes
+                //std::cout << "Resetting edge sheet attributes..." << std::endl;
+                //sheet_op.reset_sheet_attributes();
+                std::cout << "Calculating mesh sheet number..." << std::endl;
+                sheet_op.get_mesh_sheet_number();
+                std::cout << "Computing edge energy..." << std::endl;
+                sheet_op.compute_edge_energy();
+                
+                std::cout << "Calculating state..." << std::endl;
+                calc_state(&tmesh, state, sheet_op);
+                std::cout << "State calculation complete, current state:" << std::endl;
+                state.print();
 
-            std::cout << "Generating singularity numbers..." << std::endl;
-            get_singularity_num_op.generate_singularity_number(&tmesh);
-            current_singularity_num = get_singularity_num_op.singualarity_id;
+                std::cout << "Generating singularity numbers..." << std::endl;
+                get_singularity_num_op.generate_singularity_number(&tmesh);
+                current_singularity_num = get_singularity_num_op.singualarity_id;
 
-            std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl; // 明确指出是哪个文件的episode
-            std::cout << "Current singularity number: " << current_singularity_num << std::endl;
+                std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl; // 明确指出是哪个文件的episode
+                std::cout << "Current singularity number: " << current_singularity_num << std::endl;
 
-            // 检查状态是否有效：如果所有边的能量都小于等于0，则跳过此 episode
-            bool all_energy_non_positive = true; // Assume true initially
-            if (state.size() > 0) { // 确保状态不为空
-                // 使用索引循环访问 sheet_energy
-                for (size_t i = 0; i < state.size(); ++i) {
-                    // Access energy using the correct member vector
-                    if (state.sheet_energy[i] > 0) { // Check if any energy is positive
-                        all_energy_non_positive = false; // Found a positive energy, so not all are non-positive
-                        break; // No need to check further
+                // 检查状态是否有效：如果所有边的能量都小于等于0，则跳过此 episode
+                bool all_energy_non_positive = true; // Assume true initially
+                if (state.size() > 0) { // 确保状态不为空
+                    // 使用索引循环访问 sheet_energy
+                    for (size_t i = 0; i < state.size(); ++i) {
+                        // Access energy using the correct member vector
+                        if (state.sheet_energy[i] > 0) { // Check if any energy is positive
+                            all_energy_non_positive = false; // Found a positive energy, so not all are non-positive
+                            break; // No need to check further
+                        }
+                    }
+                } else {
+                    // 如果状态本身为空，也视为无效状态 (或者说，没有正能量边)
+                    all_energy_non_positive = true;
+                }
+                // If all energies are non-positive (<= 0), skip this episode
+                if (all_energy_non_positive) {
+                    std::cout << "INFO: All edge energies are non-positive or state is empty. No further optimization possible for this episode for file " << mesh_name << std::endl;
+                    debug_log << "All edge energies are non-positive or state is empty after calculation for file " << mesh_name << ", aborting episode" << std::endl;
+                    break; // Skip this file and try next
+                }
+
+                float total_reward_for_logging = 0.0; // 可以保留一个用于日志的累计
+                while(agent.attr("is_finish")(state_to_list(state)).cast<bool>()){
+
+                    State state_snapshot = state;
+                    int action = agent.attr("choose_action")(state_to_list(state_snapshot), episode).cast<int>();
+                    std::cout << "Action: " << action << std::endl;
+                    
+                    debug_log << "State size before action: " << state.size() << std::endl;
+                    int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op, original_hex_count);
+                    debug_log << "State size after action: " << state.size() << std::endl;
+                    std::cout << "Action result: " << done << std::endl;
+
+                    if(done == 0 ) {
+                        // 处理错误或 C++ 端检测到的完成
+                        float final_step_reward = (done == 0) ? -100000.0f : calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
+                        total_reward_for_logging += final_step_reward; // 更新日志用总奖励
+                        agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, (done==0)); // 传递最后一步的奖励和错误状态
+                        agent.attr("replay")();
+                        break; // 退出 while 循环
+                    } else if (done == 1) {
+                        // 算法正常按照期望执行成功，完成mesh 瘦身
+                        float final_step_reward = 1000.0f; 
+                        total_reward_for_logging += final_step_reward; // 更新日志用总奖励
+                        agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, false); // 传递最后一步的奖励和错误状态
+                        agent.attr("replay")();
+                        break;
+
+                    }else if (done == 2) {
+                        // 成功执行一步
+                        float step_reward = calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
+                        total_reward_for_logging += step_reward; // 更新日志用总奖励
+                
+                        // 移除 C++ 端的步数增加: agent.attr("current_episode_steps") += 1;
+                
+                        // 调用 remember，传递单步奖励 step_reward
+                        agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), step_reward, false, false); // is_error=false
+                
+                        // 更新 C++ 端的奇异线数量，用于下一次奖励计算
+                        get_singularity_num_op.generate_singularity_number(&tmesh);
+                        current_singularity_num = get_singularity_num_op.singualarity_id;
+                
+                        // 经验回放
+                        agent.attr("replay")();
                     }
                 }
-            } else {
-                // 如果状态本身为空，也视为无效状态 (或者说，没有正能量边)
-                all_energy_non_positive = true;
-            }
-            // If all energies are non-positive (<= 0), skip this episode
-            if (all_energy_non_positive) {
-                std::cout << "INFO: All edge energies are non-positive or state is empty. No further optimization possible for this episode for file " << mesh_name << std::endl;
-                debug_log << "All edge energies are non-positive or state is empty after calculation for file " << mesh_name << ", aborting episode" << std::endl;
-                break; // Skip this file and try next
-            }
-
-            float total_reward_for_logging = 0.0; // 可以保留一个用于日志的累计
-            while(agent.attr("is_finish")(state_to_list(state)).cast<bool>()){
-
-                State state_snapshot = state;
-                int action = agent.attr("choose_action")(state_to_list(state_snapshot), episode).cast<int>();
-                std::cout << "Action: " << action << std::endl;
-                
-                debug_log << "State size before action: " << state.size() << std::endl;
-                int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op, original_hex_count);
-                debug_log << "State size after action: " << state.size() << std::endl;
-                std::cout << "Action result: " << done << std::endl;
-
-                if(done == 0 ) {
-                    // 处理错误或 C++ 端检测到的完成
-                    float final_step_reward = (done == 0) ? -100000.0f : calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
-                    total_reward_for_logging += final_step_reward; // 更新日志用总奖励
-                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, (done==0)); // 传递最后一步的奖励和错误状态
+            
+                if (state.size() > 0) {
+                    std::cout << "Training normally ended, saving model" << std::endl;
                     agent.attr("replay")();
-                    break; // 退出 while 循环
-                } else if (done == 1) {
-                    // 算法正常按照期望执行成功，完成mesh 瘦身
-                    float final_step_reward = 1000.0f; 
-                    total_reward_for_logging += final_step_reward; // 更新日志用总奖励
-                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, false); // 传递最后一步的奖励和错误状态
-                    agent.attr("replay")();
-                    break;
 
-                }else if (done == 2) {
-                    // 成功执行一步
-                    float step_reward = calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
-                    total_reward_for_logging += step_reward; // 更新日志用总奖励
-            
-                    // 移除 C++ 端的步数增加: agent.attr("current_episode_steps") += 1;
-            
-                    // 调用 remember，传递单步奖励 step_reward
-                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), step_reward, false, false); // is_error=false
-            
-                    // 更新 C++ 端的奇异线数量，用于下一次奖励计算
-                    get_singularity_num_op.generate_singularity_number(&tmesh);
-                    current_singularity_num = get_singularity_num_op.singualarity_id;
-            
-                    // 经验回放
-                    agent.attr("replay")();
+                } else {
+                    std::cout << "Training abnormally ended, state is empty" << std::endl;
                 }
-            }
-            
-            if (state.size() > 0) {
-                std::cout << "Training normally ended, saving model" << std::endl;
-                agent.attr("replay")();
 
-            } else {
-                std::cout << "Training abnormally ended, state is empty" << std::endl;
-            }
-
-            // save to data\results
-            //     std::string result_dir = "F://RL_HMesh//data//results//";
-            //     system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
-            // // 从mesh_name提取文件名部分 (不含扩展名)
-            // std::string base_filename = entry.path().stem().string();
-            // std::string result_file = result_dir + base_filename + "_processed_" + std::to_string(episode) + ".Qhex";
-            // std::cout << "Saving collapsed mesh to: " << result_file << std::endl;
-            // tmesh.write_Qhex(result_file.c_str());
+                // save to data\results
+                //     std::string result_dir = "F://RL_HMesh//data//results//";
+                //     system(("mkdir \"" + result_dir + "\" 2>NUL").c_str());
+                // // 从mesh_name提取文件名部分 (不含扩展名)
+                // std::string base_filename = entry.path().stem().string();
+                // std::string result_file = result_dir + base_filename + "_processed_" + std::to_string(episode) + ".Qhex";
+                // std::cout << "Saving collapsed mesh to: " << result_file << std::endl;
+                // tmesh.write_Qhex(result_file.c_str());
 
 
-            // Restore cout and cerr at the end of training for this file
-            std::cout.rdbuf(cout_buf);
-            std::cerr.rdbuf(cerr_buf);
-            } // end episode loop for one file
+                // Restore cout and cerr at the end of training for this file
+                std::cout.rdbuf(cout_buf);
+                std::cerr.rdbuf(cerr_buf);
+                } // end episode loop for one file
 
             std::cout << "process down: " << mesh_name << std::endl;
                     
