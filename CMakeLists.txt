@@ -16,7 +16,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0")
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDebugDLL")
 
 set(PYBIND11_FINDPYTHON ON)
-set(pybind11_DIR "C:/Users/28551/AppData/Local/Programs/Python/Python311/Lib/site-packages/pybind11/share/cmake/pybind11")
+# Point pybind11_DIR to the virtual environment's site-packages
+# Ensure your virtual environment is named .venv and is in the project root
+set(pybind11_DIR "${CMAKE_SOURCE_DIR}/.venv/Lib/site-packages/pybind11/share/cmake/pybind11")
 
 find_package(Python REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 REQUIRED CONFIG)

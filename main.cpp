@@ -15,8 +15,7 @@
 #include <fstream>
 #include <vector>
 #include <sstream>
-#include <filesystem> // 添加 filesystem 头文件
-
+#include <filesystem>
 #define PYBIND11_DETAILED_ERROR_MESSAGES
 #include <pybind11/embed.h>
 #include <pybind11/stl.h>
@@ -333,17 +332,26 @@ int main(int argc, char* argv[])
                 std::cout << "Action: " << action << std::endl;
                 
                 debug_log << "State size before action: " << state.size() << std::endl;
-                int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op);
+                int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op, original_hex_count);
                 debug_log << "State size after action: " << state.size() << std::endl;
                 std::cout << "Action result: " << done << std::endl;
 
-                if(done == 0 || done == 1) {
+                if(done == 0 ) {
                     // 处理错误或 C++ 端检测到的完成
                     float final_step_reward = (done == 0) ? -100000.0f : calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
                     total_reward_for_logging += final_step_reward; // 更新日志用总奖励
-                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, (done==0)); // 传递最后一步的奖励和错误状态
+                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, (done==0)); // 传递最后一步的奖励和错误状态
+                    agent.attr("replay")();
                     break; // 退出 while 循环
-                } else if (done == 2) {
+                } else if (done == 1) {
+                    // 算法正常按照期望执行成功，完成mesh 瘦身
+                    float final_step_reward = 1000.0f; 
+                    total_reward_for_logging += final_step_reward; // 更新日志用总奖励
+                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, false); // 传递最后一步的奖励和错误状态
+                    agent.attr("replay")();
+                    break;
+
+                }else if (done == 2) {
                     // 成功执行一步
                     float step_reward = calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
                     total_reward_for_logging += step_reward; // 更新日志用总奖励
@@ -351,7 +359,7 @@ int main(int argc, char* argv[])
                     // 移除 C++ 端的步数增加: agent.attr("current_episode_steps") += 1;
             
                     // 调用 remember，传递单步奖励 step_reward
-                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), step_reward, false); // is_error=false
+                    agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), step_reward, false, false); // is_error=false
             
                     // 更新 C++ 端的奇异线数量，用于下一次奖励计算
                     get_singularity_num_op.generate_singularity_number(&tmesh);

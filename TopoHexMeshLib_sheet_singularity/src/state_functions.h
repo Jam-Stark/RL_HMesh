@@ -276,7 +276,7 @@ int find_sheet_id(State state, int action);
 bool check_in_state(State state, int action);
 std::vector<TE*> get_sheet_byId(TMesh* mesh, int sheet_id, sheet_operation<TMesh>& sheet_op);
 void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op);
-int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operation<TMesh>& sheet_op, get_singularity_number<TMesh>& get_singularity_num_op);
+int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operation<TMesh>& sheet_op, get_singularity_number<TMesh>& get_singularity_num_op, int original_hex_count);
 float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get_singularity_num_op,
              const State& prev_state, int action_index, const State& new_state);
 void print_state(const State& state);
@@ -493,7 +493,7 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
 }
 
 // 修改play_action函数，整合日志
-int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operation<TMesh>& sheet_op, get_singularity_number<TMesh>& get_singularity_num_op) {
+int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operation<TMesh>& sheet_op, get_singularity_number<TMesh>& get_singularity_num_op,int original_hex_count) {
     // 不再使用固定的state size
     std::cout << "action: " << action << " state_energy: " << state.sheet_energy[action] << std::endl;
     
@@ -539,17 +539,9 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
         // }
         return done;
     } 
-    else if (state.sheet_energy[action] <= 0) {
-        done = 1; // 1表示 mesh优化结束，重置开始下一个episode
-        // if (action_log.is_open()) {
-        //     action_log << "Done status: " << done << std::endl;
-        //     action_log << "========== End of Action Log ==========" << std::endl << std::endl;
-        //     action_log.close();
-        // }
-        return done;
-    }
     else {
-        done = 2; // 2表示优化未结束，正常选择下一个sheet
+
+        int before_action_mesh_size = tmesh.hs.size(); // 记录折叠前的网格大小
 
         sheet_op.collapse_one_sheet2(get_sheet_byId(&tmesh, state.sheet_id[action], sheet_op));
         std::cout << "collapse sheet: " << state.sheet_id[action]<<" done" << std::endl;
@@ -561,6 +553,16 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
         std::cout << "generate_singularity_number" << std::endl;
 
         tmesh.compute_features();
+
+        int current_mesh_size = tmesh.hs.size(); // 记录折叠后的网格大小
+
+        if(current_mesh_size < 0.6*original_hex_count) {   //0.x 是一个阈值，可以根据需要进行调整
+            std::cout << "mesh size is less than 0.5*original" << std::endl;
+            done = 1; // 0表示 因为模型选择错误导致的异常，应赋予极大惩罚
+            return done;
+        }
+
+        done=2;
 
         state.clear();
         std::cout << "clear state down" << std::endl;
@@ -668,7 +670,6 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     // 阈值和惩罚因子可能需要调整
     // const int VALENCE_THRESHOLD = 2;
     // const float VALENCE_PENALTY_FACTOR = 1.0f; // 例如，每个超过阈值的连接点扣 1 分
-
     // if (valence > VALENCE_THRESHOLD) {
     // geometry_reward -= static_cast<float>(valence - VALENCE_THRESHOLD) * VALENCE_PENALTY_FACTOR; // 可以惩罚超出阈值的部分
     // logFunc("  calc_reward: Penalty added for high valence (" + std::to_string(valence) + ", Threshold=" + std::to_string(VALENCE_THRESHOLD) + "): " + std::to_string(-static_cast<float>(valence - VALENCE_THRESHOLD) * VALENCE_PENALTY_FACTOR));
@@ -686,6 +687,9 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     } else {
     //logFunc("  calc_reward: Skipping quality change reward due to invalid average Jacobian values or empty states.");
     }
+
+    // 网格大小减小奖励
+
 
     // --- 总奖励 ---
     float total_reward = base_reward + geometry_reward;

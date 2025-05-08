@@ -3,6 +3,8 @@ load nn model
 revcieve state from cpp
 output action to cpp
 update nn model
+
+基于奖励的外部逻辑停止训练 + 部署时监控质量停止
 """
 
 import torch
@@ -141,7 +143,7 @@ class Agent:
             print("检查点加载不完整或失败")
             return False
             
-    def remember(self, state, action, next_state, single_step_reward, is_error=False):
+    def remember(self, state, action, next_state, single_step_reward, done, is_error=False):
         # --- 检查是否为严重错误 (可以保留或调整) ---
         if single_step_reward < -50000: # 使用传入的单步奖励判断
             is_error = True
@@ -153,7 +155,7 @@ class Agent:
         # 注意：这里传递给 memory 的事件元组可能也需要调整，
         # 如果 memory 内部使用了 reward 来定优先级，确保它理解这是单步奖励
         # 或者直接使用这里计算的 priority
-        self.memory.push((state, action, next_state, single_step_reward, is_error), priority) # 存储单步奖励
+        self.memory.push((state, action, next_state, single_step_reward, done, is_error), priority) # 存储单步奖励
 
         # --- 新增/修改: 更新 episode 状态 ---
         self.current_episode_steps += 1  # 在这里增加步数计数
@@ -376,8 +378,8 @@ class Agent:
                 action = batch[1][i]
                 next_state = batch[2][i]
                 reward = batch[3][i]
-                # 检查是否为错误经验（如果有第5个元素）
-                is_error = len(batch) > 4 and batch[4][i]
+                done = batch[4][i]     # 新增：获取 done 状态 (假设 done 是元组中第5个元素，索引为4)
+                is_error = batch[5][i] # 修改：假设 is_error 是元组中的第6个元素 (索引为5)
                 
                 # 提取当前状态和下一状态的特征
                 state_features, _ = self.extract_features(state)
@@ -429,10 +431,13 @@ class Agent:
                         # 然后使用目标网络计算该动作的Q值
                         next_q_value = next_state_q_values[best_action]
                     else:
-                        next_q_value = torch.tensor(0.0).to(self.device)
+                        next_q_value = torch.tensor(0.0).to(self.device) # Default if no next state
                 
-                # 计算期望Q值，使用截断的n步Q值以提高稳定性
-                expected_q_value = torch.tensor(reward).to(self.device) + self.gamma * next_q_value
+                # 计算期望Q值
+                if done:
+                    expected_q_value = torch.tensor(reward).to(self.device)
+                else:
+                    expected_q_value = torch.tensor(reward).to(self.device) + self.gamma * next_q_value
                 
                 # 计算TD误差
                 td_error = abs((expected_q_value - current_q_value).item())
@@ -480,9 +485,9 @@ class Agent:
             action_batch = torch.tensor([item for item in batch[1]], dtype=torch.long).to(self.device)
             next_state_batch = torch.tensor([item for item in batch[2]], dtype=torch.float32).to(self.device)
             reward_batch = torch.tensor([item for item in batch[3]], dtype=torch.float32).to(self.device)
-            
-            # 检查是否有错误标志
-            error_flags = torch.tensor([len(batch) > 4 and item for item in batch[4]], dtype=torch.bool).to(self.device) if len(batch) > 4 else None
+            done_batch = torch.tensor([item for item in batch[4]], dtype=torch.bool).to(self.device) # 新增：获取 done 状态 (假设 done 是元组中第5个元素，索引为4)
+            # 假设 is_error 是元组中的第6个元素 (索引5)
+            error_flags = torch.tensor([item for item in batch[5]], dtype=torch.bool).to(self.device) # 修改
             
             self.optimizer.zero_grad()
             
@@ -499,7 +504,11 @@ class Agent:
                 next_q_value = next_q_values.gather(1, next_q_actions).squeeze(1)
                 
             # 计算期望Q值
-            expected_q_value = reward_batch + self.gamma * next_q_value
+            # 如果 done_batch[i] is True, 那么 (self.gamma * next_q_value)[i] 应该为0
+            # ~done_batch (布尔型) 在乘法中 True 行为像 1, False 像 0.
+            # 所以如果 done is True, ~done_batch is False, 乘积项为0.
+            # 如果 done is False, ~done_batch is True, 乘积项为 next_q_value.
+            expected_q_value = reward_batch + self.gamma * next_q_value * (~done_batch)
             
             # 计算TD误差（用于更新优先级）
             td_errors = abs(expected_q_value.detach() - q_value.detach()).cpu().numpy()

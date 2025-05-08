@@ -19,3 +19,5 @@ python_modules/models/
 TopoHexMeshLib_sheet_singularity/.vs/
 TopoHexMeshLib_sheet_singularity/_vs/
 TopoHexMeshLib_sheet_singularity/packages/
+
+.venv
