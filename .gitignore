@@ -21,3 +21,5 @@ TopoHexMeshLib_sheet_singularity/_vs/
 TopoHexMeshLib_sheet_singularity/packages/
 
 .venv
+
+setup/
