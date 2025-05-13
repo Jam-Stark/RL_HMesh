@@ -3,8 +3,8 @@
 
 #include <stdio.h>
 
-#include "..\..\core\TetMesh\BaseTMesh.h"
-#include "..\..\core\TetMesh\titerators.h"
+#include "..\..\core\HexMesh\BasehMesh.h"
+#include "..\..\core\HexMesh\hiterators.h"
 #include "..\..\core\Geometry\plane.h"
 
 #ifndef PI

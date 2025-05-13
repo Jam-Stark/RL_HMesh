@@ -21,9 +21,9 @@ class Agent:
     def __init__(self, eta=0.5, gamma=0.99, capacity=100000, batch_size=32, episode=0,
                  use_geometric_features=True,
                  # --- 新增/修改: 使超参数可配置 ---
-                 max_steps_per_episode=500,
-                 reward_threshold_to_stop=150.0,
-                 no_improvement_steps_threshold=50,
+                 max_steps_per_episode=10,
+                 reward_threshold_to_stop=100.0,
+                 no_improvement_steps_threshold=5,
                  improvement_tolerance=1.0):
 
         self.rewards = []

@@ -531,7 +531,7 @@ void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
         }
     }
     //logFunc("calc_state: State calculation finished. Final state size: " + std::to_string(state.size()));
-    state.print();
+    //state.print();
 }
 
 // 修改play_action函数，整合日志
@@ -545,26 +545,20 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
     // _dupenv_s(&session_id_env, &len, "RL_HMESH_SESSION_ID");
     // std::string session_id = session_id_env ? std::string(session_id_env) : "unknown";
     // if (session_id_env) free(session_id_env);
-    
     // // 创建当前会话的日志目录
     // std::string log_dir = "f:\\RL_HMesh\\logs\\" + session_id;
-    
     // // 创建特定于此操作的日志文件
     // std::string action_log_filename = log_dir + "\\action_" + 
     //                                 std::to_string(action) + "_sheet_" + 
     //                                 std::to_string(state.sheet_id[action]) + ".log";
-    
     // std::ofstream action_log(action_log_filename, std::ios::app);
-    
     //if (action_log.is_open()) {
     //     auto now = std::chrono::system_clock::now();
     //     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
     //     std::tm now_tm;
     //     localtime_s(&now_tm, &now_time);
-        
     //     char timestamp[64];
     //     std::strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", &now_tm);
-        
     //     action_log << "==== Action Log: " << timestamp << " ====" << std::endl;
     //     action_log << "Session ID: " << session_id << std::endl;
     //     action_log << "Action: " << action << " Sheet ID: " << state.sheet_id[action] << " Energy: " << state.sheet_energy[action] << std::endl;
@@ -583,7 +577,15 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
     } 
     else {
 
-        int before_action_mesh_size = tmesh.hs.size(); // 记录折叠前的网格大小
+        //int before_action_mesh_cell = tmesh.hs.size(); // 记录折叠前的网格相关参数
+        //int before_action_mesh_edge = tmesh.es.size();
+        //int before_action_mesh_face = tmesh.fs.size();
+        //int before_action_mesh_vertex = tmesh.vs.size();
+        //std::cout << "before_action_mesh_cell: " << before_action_mesh_cell << std::endl;
+        //std::cout << "before_action_mesh_edge: " << before_action_mesh_edge << std::endl;
+        //std::cout << "before_action_mesh_face: " << before_action_mesh_face << std::endl;
+        //std::cout << "before_action_mesh_vertex: " << before_action_mesh_vertex << std::endl;
+
 
         sheet_op.collapse_one_sheet2(get_sheet_byId(&tmesh, state.sheet_id[action], sheet_op));
         std::cout << "collapse sheet: " << state.sheet_id[action]<<" done" << std::endl;
@@ -596,11 +598,19 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
 
         tmesh.compute_features();
 
-        int current_mesh_size = tmesh.hs.size(); // 记录折叠后的网格大小
+        int current_mesh_cell = tmesh.hs.size(); // 记录折叠后的网格大小
+        int current_mesh_edge = tmesh.es.size();
+        int current_mesh_face = tmesh.fs.size();
+        int current_mesh_vertex = tmesh.vs.size();
+        std::cout << "current_mesh_cell: " << current_mesh_cell << std::endl;
+        std::cout << "current_mesh_edge: " << current_mesh_edge << std::endl;
+        std::cout << "current_mesh_face: " << current_mesh_face << std::endl;
+        std::cout << "current_mesh_vertex: " << current_mesh_vertex << std::endl;
 
-        if(current_mesh_size < 0.6*original_hex_count) {   //0.x 是一个阈值，可以根据需要进行调整
-            std::cout << "mesh size is less than 0.5*original" << std::endl;
-            done = 1; // 0表示 因为模型选择错误导致的异常，应赋予极大惩罚
+
+        if(current_mesh_cell < 0.2*original_hex_count) {   //0.x 是一个阈值，可以根据需要进行调整
+            std::cout << "mesh size is less than 0.2*original" << std::endl;
+            done = 1; 
             return done;
         }
 
