@@ -162,13 +162,22 @@ class AttentionHexMeshQNet(nn.Module):
         
         # Q值预测MLP
         self.q_mlp = nn.Sequential(
-            nn.Linear(hidden_dim*2, hidden_dim),
+            nn.Linear(hidden_dim*2, hidden_dim), # 输入是 sheet_embs 和 global_embs 的拼接
             nn.LayerNorm(hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(hidden_dim, hidden_dim//2),
             nn.LayerNorm(hidden_dim//2),
             nn.ReLU(inplace=True),
-            nn.Linear(hidden_dim//2, 1)
+            nn.Linear(hidden_dim//2, 1) # 输出单个Q值 (每个action一个)
+        )
+
+        # 新增：用于预测整个状态是否应该终止的MLP头
+        # 这个头接收全局图嵌入 g_emb作为输入
+        self.state_done_predictor = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim // 2), # 输入是 g_emb 的维度
+            nn.LayerNorm(hidden_dim // 2),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim // 2, 1) # 输出单个logit，表示整个状态的终止信号
         )
     
     def forward(self, x, edge_index, batch, sheet_node_idx, sheet_features=None):
@@ -179,35 +188,46 @@ class AttentionHexMeshQNet(nn.Module):
         for layer in self.attention_layers:
             x = F.elu(layer(x, edge_index))
         
-        # 全局图嵌入
+        # 全局图嵌入 (g_emb 的形状是 [batch_size, hidden_dim], 在这里 batch_size 通常是 1)
         g_emb = global_mean_pool(x, batch)
         
         # Sheet节点池化
         sheet_embs = []
         for idx in sheet_node_idx:
             sheet_embs.append(x[idx].mean(dim=0))
-        sheet_embs = torch.stack(sheet_embs, dim=0)
+        sheet_embs = torch.stack(sheet_embs, dim=0) # [num_sheets, hidden_dim]
         
         # 如果提供了几何特征，使用交叉注意力融合
         if sheet_features is not None:
-            geo_embs = self.geometry_encoder(sheet_features)
+            geo_embs = self.geometry_encoder(sheet_features) # [num_sheets, hidden_dim]
             # 使用交叉注意力进行特征融合
-            sheet_embs = sheet_embs.unsqueeze(0)  # [1, num_sheets, hidden_dim]
-            geo_embs = geo_embs.unsqueeze(0)  # [1, num_sheets, hidden_dim]
+            # MultiheadAttention期望的输入是 (L, N, E) 或 (N, L, E) (如果batch_first=True)
+            # L是序列长度, N是批大小, E是特征维度
+            # 当前 sheet_embs 是 [num_sheets, hidden_dim], geo_embs 是 [num_sheets, hidden_dim]
+            # 我们将num_sheets视为序列长度，批大小为1
+            _sheet_embs = sheet_embs.unsqueeze(0)  # [1, num_sheets, hidden_dim]
+            _geo_embs = geo_embs.unsqueeze(0)    # [1, num_sheets, hidden_dim]
             
             # 应用交叉注意力
             fused_embs, _ = self.cross_attention(
-                query=sheet_embs, 
-                key=geo_embs, 
-                value=geo_embs
+                query=_sheet_embs, 
+                key=_geo_embs, 
+                value=_geo_embs
             )
             sheet_embs = fused_embs.squeeze(0)  # [num_sheets, hidden_dim]
         
-        # 扩展全局嵌入
-        global_embs = g_emb.expand(sheet_embs.size(0), -1)
+        # 扩展全局嵌入以匹配sheets的数量，用于Q值预测
+        expanded_g_emb = g_emb.expand(sheet_embs.size(0), -1) # [num_sheets, hidden_dim]
         
-        # 拼接并预测Q值
-        h = torch.cat([sheet_embs, global_embs], dim=1)
-        q_values = self.q_mlp(h).squeeze(-1)
+        # 拼接特征用于Q值预测
+        h_for_q_values = torch.cat([sheet_embs, expanded_g_emb], dim=1) # [num_sheets, hidden_dim*2]
         
-        return q_values
+        # 预测Q值 (每个action一个)
+        q_values = self.q_mlp(h_for_q_values).squeeze(-1) # [num_sheets]
+        
+        # 使用全局图嵌入 g_emb 预测整个状态的 'done' 信号 logit
+        # g_emb 的形状是 [batch_size, hidden_dim]。如果 batch_size > 1, squeeze(-1) 后是 [batch_size]
+        # 对于单图推理，batch_size=1, g_emb是[1, hidden_dim], state_done_logit会是[1]
+        state_done_logit = self.state_done_predictor(g_emb).squeeze(-1) 
+        
+        return q_values, state_done_logit

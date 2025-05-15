@@ -277,7 +277,7 @@ int main(int argc, char* argv[])
                     float total_reward = 0.0;
                     State state;
                     //std::cout << "Initial state:" << std::endl;
-                    state.print();
+                    //state.print();
                     
                     // First reset all edge sheet attributes
                     //std::cout << "Resetting edge sheet attributes..." << std::endl;
@@ -290,14 +290,22 @@ int main(int argc, char* argv[])
                     std::cout << "Calculating state..." << std::endl;
                     calc_state(&tmesh, state, sheet_op);
                     std::cout << "State calculation complete, current state:" << std::endl;
-                    state.print();
+                    //state.print();
 
                     std::cout << "Generating singularity numbers..." << std::endl;
                     get_singularity_num_op.generate_singularity_number(&tmesh);
                     current_singularity_num = get_singularity_num_op.singualarity_id;
+                    int original_singularity_num = current_singularity_num;
+
+                    double original_jacobian = calculate_average_min_jacobian(&tmesh);
+
+                    std::cout << "Original minimum Jacobian: " << original_jacobian << std::endl;
+
+                   // std::cin.get(); // 等待用户输入，防止程序自动继续
+
 
                     std::cout << "Episode: " << episode << " for file: " << mesh_name << std::endl; // 明确指出是哪个文件的episode
-                    std::cout << "Current singularity number: " << current_singularity_num << std::endl;
+                    std::cout << "Original singularity number: " <<original_singularity_num << std::endl;
 
                     // 检查状态是否有效：如果所有边的能量都小于等于0，则跳过此 episode
                     int energy_non_positive_count = 0; // Assume true initially
@@ -318,50 +326,143 @@ int main(int argc, char* argv[])
                     }
 
                     float total_reward_for_logging = 0.0; // 可以保留一个用于日志的累计
-                    while(agent.attr("is_finish")(state_to_list(state)).cast<bool>()){
+                    int current_episode_steps_cpp = 0;
+                    int prev_singularity_num_for_calc_reward = current_singularity_num;
+                    //int original_singularity_num_at_episode_start = current_singularity_num;
+                   while(true) {
+                        State state_snapshot_St = state; // 当前状态 S_t
+                        py::list py_St = state_to_list(state_snapshot_St);
 
-                        State state_snapshot = state;
-                        int action = agent.attr("choose_action")(state_to_list(state_snapshot), episode).cast<int>();
-                        std::cout << "Action: " << action << std::endl;
-                        
-                        debug_log << "State size before action: " << state.size() << std::endl;
-                        int done = play_action(action, 1, state, tmesh, sheet_op, get_singularity_num_op, original_hex_count);
-                        debug_log << "State size after action: " << state.size() << std::endl;
-                        std::cout << "Action result: " << done << std::endl;
+                        py::tuple action_result = agent.attr("choose_action")(py_St, episode).cast<py::tuple>();
+                        int action_At = action_result[0].cast<int>();
+                        float done_logit_for_St = action_result[1].cast<float>();
+                        // 使用 sigmoid 将 logit 转换为概率，然后与阈值比较更标准
+                        bool network_thinks_St_is_done = (1.0f / (1.0f + std::exp(-done_logit_for_St))) > 0.5f; 
+                        //bool network_thinks_St_is_done = (done_logit_for_St > 0.0f); // logit > 0 等价于 sigmoid(logit) > 0.5
 
-                        if(done == 0 ) {
-                            // 处理错误或 C++ 端检测到的完成
-                            float final_step_reward = (done == 0) ? -100000.0f : calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
-                            total_reward_for_logging += final_step_reward; // 更新日志用总奖励
-                            agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, (done==0)); // 传递最后一步的奖励和错误状态
-                            agent.attr("replay")();
-                            break; // 退出 while 循环
-                        } else if (done == 1) {
-                            // 算法正常按照期望执行成功，完成mesh 瘦身
-                            float final_step_reward = 10.0f; 
-                            total_reward_for_logging += final_step_reward; // 更新日志用总奖励
-                            agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), final_step_reward, true, false); // 传递最后一步的奖励和错误状态
-                            agent.attr("replay")();
-                            break;
+                        std::cout << "Action: " << action_At << ", Done logit: " << done_logit_for_St 
+                                << ", NetworkThinksDone: " << network_thinks_St_is_done << std::endl;
 
-                        }else if (done == 2) {
-                            // 成功执行一步
-                            float step_reward = calc_reward(current_singularity_num, get_singularity_num_op, state_snapshot, action, state);
-                            total_reward_for_logging += step_reward; // 更新日志用总奖励
-                    
-                            // 移除 C++ 端的步数增加: agent.attr("current_episode_steps") += 1;
-                    
-                            // 调用 remember，传递单步奖励 step_reward
-                            agent.attr("remember")(state_to_list(state_snapshot), action, state_to_list(state), step_reward, false, false); // is_error=false
-                    
-                            // 更新 C++ 端的奇异线数量，用于下一次奖励计算
-                            get_singularity_num_op.generate_singularity_number(&tmesh);
-                            current_singularity_num = get_singularity_num_op.singualarity_id;
-                    
-                            // 经验回放
-                            agent.attr("replay")();
+                        bool force_continue_override = false;
+                        // **在这里加入您判断是否要覆盖网络“提前终止”的逻辑**
+                        // 例如：如果是 训练 的first sevaral steps，并且初始状态并非真的不可操作，则强制继续
+                        if (network_thinks_St_is_done == true && current_episode_steps_cpp <3 /* && !is_genuinely_terminal(state_snapshot_St) */) {
+                            std::cout << "Network suggested DONE at step 0. Overriding to CONTINUE." << std::endl;
+                            force_continue_override = true;
                         }
-                    }
+
+                        float reward_for_remember = 0.0f;
+                        bool done_flag_for_remember = false;
+                        bool is_error_for_remember = false;
+                        py::list py_next_state_for_remember = py_St; // 默认情况下，如果原地终止，next_state 就是 current_state
+
+                        if (network_thinks_St_is_done ==true && force_continue_override==false) {
+                            // 情况1：网络认为 S_t 终止，C++不覆盖 (例如，不是第一步，或者S_t确实可能是一个合理的终止点)
+                            // play_action 不执行。计算基于 S_t 的终局奖励。
+                            get_singularity_num_op.generate_singularity_number(&tmesh); // 确保tmesh是S_t状态
+                            int current_sing_at_St = get_singularity_num_op.singualarity_id;
+                            double current_jac_at_St = calculate_average_min_jacobian(&tmesh);
+
+                            // 调用 evaluate_overall_mesh_quality 时，请确保参数顺序正确
+                            reward_for_remember = evaluate_overall_mesh_quality(
+                                original_singularity_num, current_sing_at_St,
+                                original_jacobian, current_jac_at_St);
+                            
+                            done_flag_for_remember = true; // 因为 训练 在此终止
+                            // py_next_state_for_remember 已经是 py_St (或一个表示终止的特殊状态)
+                            std::cout << "Terminating based on network prediction for S_t. Terminal Reward: " << reward_for_remember << std::endl;
+
+                        } else {
+                            // 情况2：网络认为 S_t 不终止，或者网络认为终止但被C++覆盖了(force_continue_override = true)
+                            // 因此，实际执行动作 A_t
+                            debug_log << "State size before action: " << state_snapshot_St.size() << std::endl; // 用 state_snapshot_St
+                            // play_action会修改 state，使其从 S_t 变为 S_{t+1}
+                            int done_code_from_env = play_action(action_At, 1, state, tmesh, sheet_op, get_singularity_num_op, original_hex_count);
+                            debug_log << "State size after action: " << state.size() << std::endl; // state 现在是 S_{t+1}
+                            std::cout << "play_action result code: " << done_code_from_env << std::endl;
+
+                            py_next_state_for_remember = state_to_list(state); // S_{t+1}
+
+                            // 计算单步奖励 R_step (S_t, A_t) -> S_{t+1}
+                            // 注意 calc_reward 的第一个参数是执行动作前的奇异线数量
+                            reward_for_remember = calc_reward(prev_singularity_num_for_calc_reward, get_singularity_num_op, state_snapshot_St, action_At, state);
+                            std::cout << "Step reward from calc_reward: " << reward_for_remember << std::endl;
+
+                            if (done_code_from_env == 0) { // C++ 环境错误
+                                std::cout << "Terminating due to environment error (play_action returned 0)." << std::endl;
+                                reward_for_remember = -100000.0f; // 重写奖励为巨大惩罚
+                                done_flag_for_remember = true;
+                                is_error_for_remember = true;
+                            } else if (done_code_from_env == 1) { // C++ 环境判定成功终止 (例如，网格元素数量达到阈值)
+                                std::cout << "Terminating due to C++ environment success (play_action returned 1)." << std::endl;
+                                // 此时，S_{t+1} 是终态。我们可以用 evaluate_overall_mesh_quality 计算其终局奖励
+                                get_singularity_num_op.generate_singularity_number(&tmesh); // 确保tmesh是S_{t+1}状态
+                                int current_sing_at_St_plus_1 = get_singularity_num_op.singualarity_id;
+                                double current_jac_at_St_plus_1 = calculate_average_min_jacobian(&tmesh);
+                                
+                                reward_for_remember = evaluate_overall_mesh_quality(
+                                    original_singularity_num, current_sing_at_St_plus_1,
+                                    original_jacobian, current_jac_at_St_plus_1);
+                                std::cout << "Terminal reward for S_{t+1} (env. success): " << reward_for_remember << std::endl;
+                                done_flag_for_remember = true;
+                            } else if(done_code_from_env==2){ // done_code_from_env == 2 (正常进行)
+                                // 如果是被 force_continue_override 的情况，即使网络之前说S_t要done，
+                                // 但因为我们强制继续了，所以实际的 done_flag_for_remember 应该是 False。
+                                done_flag_for_remember = false; 
+                                // 这里还可以加入其他C++侧的终止条件判断，例如最大步数
+                                // if (current_episode_steps_cpp >= MAX_STEPS_PER_EPISODE) {
+                                //    done_flag_for_remember = true;
+                                //    // 如果因为最大步数终止，也可以考虑调用 evaluate_overall_mesh_quality 计算最终状态 S_{t+1} 的质量作为奖励
+                                // }
+                                std::cout << "Continuing to next step (play_action returned 2)." << std::endl;
+                            } else if(done_code_from_env == 3) { //判断正常实施action后的next_state是否应该为终止state,如果是则 done_flag_for_remember = true,用evaluate_overall_mesh_quality(S_{t+1})
+                                std::cout << "Terminating based on action returned 3 for S_{t+1} is end state." << std::endl;
+                                done_flag_for_remember = true;
+
+                                // 关键: 重新计算奖励为基于 S_{t+1} 的终局奖励
+                                get_singularity_num_op.generate_singularity_number(&tmesh); // 确保是 S_{t+1} 的奇异线数量
+                                int current_sing_at_St_plus_1 = get_singularity_num_op.singualarity_id;
+                                double current_jac_at_St_plus_1 = calculate_average_min_jacobian(&tmesh); // S_{t+1} 的雅可比值
+
+                                reward_for_remember = evaluate_overall_mesh_quality(
+                                    original_singularity_num, // 初始的奇异线数量
+                                    current_sing_at_St_plus_1,  // S_{t+1} 的奇异线数量
+                                    original_jacobian,         // 初始的雅可比值
+                                    current_jac_at_St_plus_1   // S_{t+1} 的雅可比值
+                                );
+
+                                reward_for_remember += 100.0f; // 网络确实抵达了终止状态再结束的额外奖励
+                                if(network_thinks_St_is_done == true)
+                                    reward_for_remember += 100.0f; // 如果网络也认为是终止状态，给额外奖励
+                                std::cout << "Terminal reward for S_{t+1} (agent.is_finish() triggered): " << reward_for_remember << std::endl;
+                            }
+                        }
+
+                        // 记录经验
+                        agent.attr("remember")(py_St, action_At, py_next_state_for_remember, reward_for_remember, done_flag_for_remember, is_error_for_remember);
+                        total_reward_for_logging += reward_for_remember;
+
+                        // 学习
+                        agent.attr("replay")();
+
+                        // 更新用于下一次 calc_reward 的奇异线计数 (应该是 S_{t+1} 的计数)
+                        // 只有在 训练 未实际终止时才需要更新，为下一次迭代做准备
+                        if (done_flag_for_remember == false) { // 如果 训练 还没有因为这一步而终止
+                            std::cout<<"before get_singularity_num_op.generate_singularity_number(&tmesh): "<< prev_singularity_num_for_calc_reward<<std::endl;
+                            get_singularity_num_op.generate_singularity_number(&tmesh); // 获取 S_{t+1} 的奇异线数
+                            prev_singularity_num_for_calc_reward = get_singularity_num_op.singualarity_id;
+                            current_episode_steps_cpp++;
+                            std::cout << "Current episode steps (C++): " << current_episode_steps_cpp << std::endl;
+                            std::cout << "Current singularity number: " << prev_singularity_num_for_calc_reward << std::endl;
+                        }
+
+                        if (done_flag_for_remember == true) { // 如果任何原因导致了这一步是终止步
+                            std::cout << "EPISODE: " << episode << " terminated. Total logged reward: " << total_reward_for_logging 
+                                    << ". Final reward for remember: " << reward_for_remember 
+                                    << ". Done flag for remember: " << done_flag_for_remember << std::endl;
+                            break; // 退出 while(true) 循环
+                        }
+                    } // 结束 while(true)
                 
                     if (state.size() > 0) {
                         std::cout << "Training normally ended, saving model" << std::endl;
@@ -477,20 +578,37 @@ int main(int argc, char* argv[])
 
                                 py::list current_state_py = state_to_list(state);
                                 if (current_state_py.empty()) {
-                                     std::cout << "Inference: state_to_list returned empty list. Stopping." << std::endl;
-                                     break;
+                                    std::cout << "Inference: state_to_list returned empty list. Stopping." << std::endl;
+                                    break;
                                 }
-                                int action_idx = agent.attr("get_action")(current_state_py).cast<int>();
+                                
+                                // 使用choose_action代替get_action，获取动作和模型对终止的预测
+                                py::tuple action_result = agent.attr("choose_action")(current_state_py, 0).cast<py::tuple>();
+                                int action_idx = action_result[0].cast<int>();
+                                float done_logit = action_result[1].cast<float>();
+                                
+                                // 打印终止预测结果
+                                std::cout << "Action: " << action_idx << ", Done logit: " << done_logit << std::endl;
+                                
+                                // 检查模型是否预测应该停止
+                                if (done_logit > 0.5) {
+                                    std::cout << "Inference: Model predicted episode should end (done_logit = " 
+                                            << done_logit << "). Stopping." << std::endl;
+                                    debug_log << "Inference: Model predicted episode should end (done_logit = " 
+                                            << done_logit << ") for file " << mesh_name << ". Stopping." << std::endl;
+                                    break;
+                                }
 
                                 if (action_idx < 0 || static_cast<size_t>(action_idx) >= state.size()) {
                                     std::cerr << "Inference Error: Agent returned invalid action index: " << action_idx << " for state size " << state.size() << std::endl;
                                     debug_log << "Inference Error: Agent returned invalid action index: " << action_idx << " for state size " << state.size() << std::endl;
                                     break; 
                                 }
+                                
                                 std::cout << "  Chosen action (index in state): " << action_idx
-                                          << ", Sheet ID: " << state.sheet_id[action_idx]
-                                          << ", Energy: " << state.sheet_energy[action_idx]
-                                          << ""<< std::endl;
+                                        << ", Sheet ID: " << state.sheet_id[action_idx]
+                                        << ", Energy: " << state.sheet_energy[action_idx]
+                                        << ""<< std::endl;
                                 debug_log << "Inference Step " << inference_steps_count + 1 << ": Action index " << action_idx << ", Sheet ID " << state.sheet_id[action_idx] << " for file " << mesh_name << std::endl;
 
                                 int play_status = play_action(action_idx, 2, state, tmesh, sheet_op, get_singularity_num_op, original_hex_count);
@@ -639,7 +757,7 @@ int main(int argc, char* argv[])
                         }
                 }
 
-            std::cout << "process down: " << mesh_name << std::endl;
+            std::cout << "process completed: " << mesh_name << std::endl;
                     
             // 确保目录存在
             system("mkdir \"python_modules\\models\" 2>NUL");
@@ -651,7 +769,7 @@ int main(int argc, char* argv[])
             } // end if .Qhex file
         } // end directory iteration loop
 
-        std::cout << "所有 .Qhex 文件处理完成。日志保存在 " << log_dir << std::endl;
+        std::cout << "All .Qhex processed。logs saved at " << log_dir << std::endl;
         return 0;
     }
     catch(py::error_already_set &e) {

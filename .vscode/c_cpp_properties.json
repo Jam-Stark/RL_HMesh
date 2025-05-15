@@ -4,12 +4,10 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
-                // --- 修改为虚拟环境路径 ---
-                "${workspaceFolder}/.venv/Include", // Python 头文件
-                "${workspaceFolder}/.venv/Lib/site-packages/pybind11/include", // pybind11 头文件
-                // --- 结束修改 ---
-                "F:/RL_HMesh/TopoHexMeshLib_sheet_singularity/HMeshLib", // 保持你的项目路径
-                "F:/RL_HMesh/TopoHexMeshLib_sheet_singularity/src"      // 保持你的项目路径
+                "F:/RL_HMesh/.venv/Include",
+                "F:/RL_HMesh/.venv/Lib/site-packages/pybind11/include",
+                "F:/RL_HMesh/TopoHexMeshLib_sheet_singularity/HMeshLib",
+                "F:/RL_HMesh/TopoHexMeshLib_sheet_singularity/src"
             ],
             "defines": [
                 "_DEBUG",

@@ -304,6 +304,15 @@ class State {
                 }
             }
         }
+
+        bool check_end_state() const {
+            for (size_t i = 0; i < sheet_energy.size(); i++) {
+                if (sheet_energy[i] > 0) {
+                    return false; // 只要有一个能量大于0，就不是终态
+                }
+            }
+            return true; // 所有能量都小于等于0，认为是终态
+        }
     
     }; // End State class
 
@@ -438,7 +447,7 @@ std::vector<TE*> get_sheet_byId(TMesh* mesh, int sheet_id, sheet_operation<TMesh
 
 // --- Update calc_state ---
 void calc_state(TMesh* mesh, State& state, sheet_operation<TMesh>& sheet_op) {
-    auto logFunc = HMeshLib::getSheetLog() ? HMeshLib::log : [](const std::string&){}; // Use sheet_operation log
+    //auto logFunc = HMeshLib::getSheetLog() ? HMeshLib::log : [](const std::string&){}; // Use sheet_operation log
 
     //logFunc("calc_state: Starting state calculation.");
     //logFunc("calc_state: Current sharp edge count: " + std::to_string(mesh->count_sharp_edges()));
@@ -598,21 +607,14 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
 
         tmesh.compute_features();
 
-        int current_mesh_cell = tmesh.hs.size(); // 记录折叠后的网格大小
-        int current_mesh_edge = tmesh.es.size();
-        int current_mesh_face = tmesh.fs.size();
-        int current_mesh_vertex = tmesh.vs.size();
-        std::cout << "current_mesh_cell: " << current_mesh_cell << std::endl;
-        std::cout << "current_mesh_edge: " << current_mesh_edge << std::endl;
-        std::cout << "current_mesh_face: " << current_mesh_face << std::endl;
-        std::cout << "current_mesh_vertex: " << current_mesh_vertex << std::endl;
-
-
-        if(current_mesh_cell < 0.2*original_hex_count) {   //0.x 是一个阈值，可以根据需要进行调整
-            std::cout << "mesh size is less than 0.2*original" << std::endl;
-            done = 1; 
-            return done;
-        }
+        // int current_mesh_cell = tmesh.hs.size(); // 记录折叠后的网格大小
+        // int current_mesh_edge = tmesh.es.size();
+        // int current_mesh_face = tmesh.fs.size();
+        // int current_mesh_vertex = tmesh.vs.size();
+        // std::cout << "current_mesh_cell: " << current_mesh_cell << std::endl;
+        // std::cout << "current_mesh_edge: " << current_mesh_edge << std::endl;
+        // std::cout << "current_mesh_face: " << current_mesh_face << std::endl;
+        // std::cout << "current_mesh_vertex: " << current_mesh_vertex << std::endl;
 
         done=2;
 
@@ -620,6 +622,9 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
         std::cout << "clear state down" << std::endl;
         calc_state(&tmesh, state, sheet_op);
         std::cout << "calc_state down" << std::endl;
+
+        if(state.check_end_state())
+          done = 3;
         // 不再调用fill_state，让state包含所有的sheet
         // if (action_log.is_open()) {
         //     action_log << "Done status: " << done << std::endl;
@@ -630,7 +635,7 @@ int play_action(int action, int done, State& state, TMesh& tmesh, sheet_operatio
     }
 }
 
-// --- Update calc_reward if needed ---
+// 计算普通step下的reward
 float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get_singularity_num_op,
     const State& prev_state, int action_index, const State& new_state) {
 
@@ -740,8 +745,6 @@ float calc_reward(int current_singularity_num, get_singularity_number<TMesh> get
     //logFunc("  calc_reward: Skipping quality change reward due to invalid average Jacobian values or empty states.");
     }
 
-    // 网格大小减小奖励
-
 
     // --- 总奖励 ---
     float total_reward = base_reward + geometry_reward;
@@ -772,8 +775,8 @@ inline py::list state_to_list(const State& state) {
         row.append(scale_value(state.sheet_curvature_metric[i], normalization_params_others[3].min_val, normalization_params_others[3].max_val, 0.0, 1.0));
         row.append(scale_value(state.sheet_normal_variation[i], normalization_params_others[4].min_val, normalization_params_others[4].max_val, 0.0, 1.0));
         row.append(scale_value(state.sheet_dihedral_angle_deviation[i], normalization_params_others[5].min_val, normalization_params_others[5].max_val, 0.0, 1.0));
-        row.append(scale_value(state.sheet_min_scaled_jacobian[i], normalization_params_others[6].min_val, normalization_params_others[6].max_val, 0.0, 1.0));
-        row.append(scale_value(state.sheet_avg_scaled_jacobian[i], normalization_params_others[7].min_val, normalization_params_others[7].max_val, 0.0, 1.0));
+        row.append(state.sheet_min_scaled_jacobian[i]); // 直接使用原始值
+        row.append(state.sheet_avg_scaled_jacobian[i]); // 直接使用原始值
         row.append(scale_value(state.sheet_distance_to_feature[i], normalization_params_others[8].min_val, normalization_params_others[8].max_val, 0.0, 1.0));
 
         result.append(row);
@@ -792,7 +795,7 @@ double calculate_average_min_jacobian(TMesh* mesh) {
     for (TMesh::MHIterator hi(mesh); !hi.end(); hi++) {
         TMesh::H* h = *hi;
         if (!h) continue;
-        std::vector<double> jacobians = quality_evaluator.get_JacobianMatricesDet(h); // 获取9个雅可比值
+        std::vector<double> jacobians = quality_evaluator.get_NormalizedJacobianMatricesDet(h); // 获取9个雅可比值
         if (jacobians.empty()) continue;
 
         double min_hex_jacobian = jacobians[0]; // 假设第一个是有效的
@@ -814,7 +817,35 @@ double calculate_average_min_jacobian(TMesh* mesh) {
     }
     return total_min_jacobian / valid_hex_count;
 }
+double calculate_average_jacobian(TMesh* mesh) { 
+    if (!mesh || mesh->hs.empty()) {
+        return 0.0; // 或者一个表示无效的值
+    }
+    CMeshQuality<TMesh> quality_evaluator(mesh);
+    double total_jacobian_sum = 0.0;
+    long long total_jacobian_points_count = 0; // 用于计数所有雅可比采样点的总数
 
+    for (TMesh::MHIterator hi(mesh); !hi.end(); hi++) {
+        TMesh::H* h = *hi;
+        if (!h) continue;
+        
+        // 获取当前六面体的所有雅可比行列式值（例如，8个角点+1个中心点，共9个）
+        std::vector<double> jacobians_for_hex = quality_evaluator.get_NormalizedJacobianMatricesDet(h); 
+        
+        if (jacobians_for_hex.empty()) continue;
+
+        //累加当前六面体的所有雅可比值
+        for (double jac_val : jacobians_for_hex) {
+            total_jacobian_sum += jac_val;
+        }
+        total_jacobian_points_count += jacobians_for_hex.size(); // 累加采样点数量
+    }
+
+    if (total_jacobian_points_count == 0) {
+        return 0.0; // 没有有效的雅可比采样点来计算平均值
+    }
+    return total_jacobian_sum / total_jacobian_points_count;
+}
 // (可选) 计算网格的最小雅可比行列式 (全局最小)
 double calculate_global_min_jacobian(TMesh* mesh) {
     if (!mesh || mesh->hs.empty()) {
@@ -827,7 +858,7 @@ double calculate_global_min_jacobian(TMesh* mesh) {
     for (TMesh::MHIterator hi(mesh); !hi.end(); hi++) {
         TMesh::H* h = *hi;
         if (!h) continue;
-        std::vector<double> jacobians = quality_evaluator.get_JacobianMatricesDet(h);
+        std::vector<double> jacobians = quality_evaluator.get_NormalizedJacobianMatricesDet(h);
         if (jacobians.empty()) continue;
 
         double min_hex_jacobian = jacobians[0];
@@ -847,32 +878,42 @@ double calculate_global_min_jacobian(TMesh* mesh) {
 }
 
 
-// 综合网格质量评估函数
-// 返回一个综合得分，越高越好
-float evaluate_overall_mesh_quality(TMesh* mesh, get_singularity_number<TMesh>& singularity_checker) {
-    if (!mesh) return -std::numeric_limits<float>::infinity();
+// 综合网格质量评估函数（在网络输出done logit时调用）
+float evaluate_overall_mesh_quality(int origianl_sigularity_num, int current_singularity_num, double original_min_jacobian, double current_min_jacobian) {
+    std::cout << "evaluate_overall_mesh_quality: original_min_jacobian: " << original_min_jacobian << std::endl;
+    std::cout << "evaluate_overall_mesh_quality: current_min_jacobian: " << current_min_jacobian << std::endl;
+    std::cout << "evaluate_overall_mesh_quality: origianl_sigularity_num: " << origianl_sigularity_num << std::endl;
+    std::cout << "evaluate_overall_mesh_quality: current_singularity_num: " << current_singularity_num << std::endl;
+    // 计算奇异性数量变化的奖励
+    //float singularity_reward = static_cast<float>(origianl_sigularity_num - current_singularity_num) * 0.10f;
 
-    // 1. 奇异线数量 (越少越好)
-    singularity_checker.generate_singularity_number(mesh); // 确保获取最新的奇异线数量
-    float singularity_score = -static_cast<float>(singularity_checker.singualarity_id) * 10.0f; // 每条奇异线扣10分
+    // 使用最终的奇异性数量计算奖励
+    int ideal_singularity_num = 5; // 理想情况下，奇异性数量应为5（保守决定）
+    float singularity_reward = static_cast<float>(ideal_singularity_num - current_singularity_num) * 0.10f;
 
-    // 2. 最小雅可比行列式 (越大越好，阈值0.1)
-    double min_jacobian = calculate_global_min_jacobian(mesh);
-    float jacobian_score = 0.0f;
-    if (min_jacobian < 0.1) {
-        jacobian_score = static_cast<float>(min_jacobian - 0.1) * 50.0f; // 低于0.1则大力惩罚
-    } else {
-        jacobian_score = static_cast<float>(min_jacobian) * 5.0f; // 高于0.1则给予正向奖励
+    // 计算雅可比行列式变化的奖励
+    float jacobian_reward = static_cast<float>(current_min_jacobian - original_min_jacobian) * 10.0f;
+
+        // 综合得分
+    float overall_quality_score = singularity_reward + jacobian_reward;
+
+    if (current_singularity_num <= 3) {
+    overall_quality_score += 150.0f; // 几乎消除奇异线的额外奖励
     }
-    
-    // 3. （可选）平均雅可比行列式 (越大越好)
-    // double avg_jacobian = calculate_average_min_jacobian(mesh);
-    // float avg_jacobian_score = static_cast<float>(avg_jacobian) * 2.0f;
+    if (current_min_jacobian > 0.9f && original_min_jacobian < 0.9f) { // 避免只是原mesh质量高导致的错误奖励
+        std::cout<<"good jacobian"<<std::endl;
+        overall_quality_score += (current_min_jacobian - 0.9f) * 30.0f; // 对高质量雅可比的额外奖励
+    }
+    if (singularity_reward ==0 && std::abs(current_min_jacobian - original_min_jacobian) < 1e-5) {
+        overall_quality_score = -100.0f; // 防止模型过早stop偷奖励
+        std::cout << "model lazy，overall_quality_score: " << overall_quality_score << std::endl;
+        return overall_quality_score;
+    }
+    std::cout << "singularity_reward: " << singularity_reward << std::endl;
+    std::cout << "jacobian_reward: " << jacobian_reward << std::endl;
 
-    // 综合得分，可以调整权重
-    float overall_quality = singularity_score + jacobian_score; // + avg_jacobian_score;
-    // std::cout << "  Quality Eval: S_Score=" << singularity_score << ", J_Score=" << jacobian_score << ", Overall=" << overall_quality << std::endl;
-    return overall_quality;
+    std::cout << "overall_quality_score: " << overall_quality_score << std::endl;
+    return overall_quality_score;
 }
 
 
